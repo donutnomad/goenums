@@ -103,6 +103,7 @@ func (g *Writer) writeEnumGenerationRequest(req enum.GenerationRequest) {
 	g.writeGeneratedComments(req)
 	g.writePackageAndImports(req)
 	g.writeWrapperDefinition(req)
+	g.writeRawTypeAlias(req)
 	g.writeContainerDefinition(req)
 	g.writeInvalidEnumDefinition(req)
 	g.writeAllFunction(req)
@@ -1022,4 +1023,27 @@ func (g *Writer) writeExhaustiveFunction(rep enum.GenerationRequest) {
 		Enums:       edefs,
 	}
 	g.writeTemplate(exhaustiveTemplate, exhaustiveData)
+}
+
+var (
+	rawTypeAliasStr = `
+// {{.RawTypeName}} is a type alias for the underlying enum type {{.EnumType}}.
+// It provides direct access to the raw enum values for cases where you need
+// to work with the underlying type directly.
+type {{.RawTypeName}} = {{.EnumType}}
+`
+	rawTypeAliasTemplate = template.Must(template.New("rawTypeAlias").Parse(rawTypeAliasStr))
+)
+
+type rawTypeAliasData struct {
+	RawTypeName string
+	EnumType    string
+}
+
+func (g *Writer) writeRawTypeAlias(rep enum.GenerationRequest) {
+	data := rawTypeAliasData{
+		RawTypeName: wrapperName(rep.EnumIota.Type) + "Raw",
+		EnumType:    rep.EnumIota.Type,
+	}
+	g.writeTemplate(rawTypeAliasTemplate, data)
 }
