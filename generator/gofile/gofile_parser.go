@@ -17,7 +17,7 @@ import (
 	"github.com/zarldev/goenums/generator/config"
 	"github.com/zarldev/goenums/internal/version"
 	"github.com/zarldev/goenums/source"
-	"github.com/zarldev/goenums/strings"
+	gostrings "github.com/zarldev/goenums/strings"
 )
 
 // Compile-time check that Parser implements enum.Parser
@@ -100,25 +100,36 @@ func (p *Parser) doParse(ctx context.Context) ([]enum.GenerationRequest, error) 
 	if err != nil {
 		return nil, err
 	}
-	packageName, enInfo, err := extractEnumInfo(ctx, p, node)
+	packageName, enInfo, enumTypeConfigs, err := extractEnumInfo(ctx, p, node)
 	if err != nil {
 		return nil, err
 	}
 	slog.Default().DebugContext(ctx, "collected all enum representations from source", "filename", filename)
-	return p.buildGenerationRequests(enInfo, packageName, filename)
+	return p.buildGenerationRequests(enInfo, packageName, filename, enumTypeConfigs)
 }
 
-func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, filename string) ([]enum.GenerationRequest, error) {
+func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, filename string, enumTypeConfigs map[string]config.EnumTypeConfig) ([]enum.GenerationRequest, error) {
 	genr := make([]enum.GenerationRequest, len(enInfo.Enums))
 	enumIotas := enInfo.Enums
+
+	// Initialize EnumTypeConfigs if not already done
+	if p.Configuration.EnumTypeConfigs == nil {
+		p.Configuration.EnumTypeConfigs = make(map[string]config.EnumTypeConfig)
+	}
+
+	// Merge the parsed enum type configs into the configuration
+	for typeName, cfg := range enumTypeConfigs {
+		p.Configuration.EnumTypeConfigs[typeName] = cfg
+	}
+
 	for i, enumIota := range enumIotas {
-		lowerPlural := strings.Pluralise(strings.ToLower(enumIota.Type))
+		lowerPlural := gostrings.Pluralise(gostrings.ToLower(enumIota.Type))
 		genr[i] = enum.GenerationRequest{
 			Package:        packageName,
 			EnumIota:       enumIota,
 			Version:        version.CURRENT,
 			SourceFilename: filename,
-			OutputFilename: strings.ToLower(lowerPlural),
+			OutputFilename: gostrings.ToLower(lowerPlural),
 			Configuration:  p.Configuration,
 			Imports:        enInfo.Imports,
 		}
@@ -126,16 +137,18 @@ func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, fi
 	return genr, nil
 }
 
-func extractEnumInfo(ctx context.Context, p *Parser, node *ast.File) (string, enumInfo, error) {
+func extractEnumInfo(ctx context.Context, p *Parser, node *ast.File) (string, enumInfo, map[string]config.EnumTypeConfig, error) {
 	slog.Default().DebugContext(ctx, "collecting all enum representations")
 	packageName := p.getPackageName(node)
 	enInfo := p.getEnumInfo(node)
+	enumTypeConfigs := p.findGoEnumsComments(node)
+
 	slog.Default().DebugContext(ctx, "enum iota", "count", len(enInfo.Enums), "enumIota", enInfo.Enums)
 	for i, enumIota := range enInfo.Enums {
 		slog.Default().DebugContext(ctx, "enum iota", "enumIota", enumIota)
 		enums := p.getEnums(node, &enumIota)
 		if len(enums) == 0 {
-			return "", enumInfo{}, fmt.Errorf("%w: %w",
+			return "", enumInfo{}, nil, fmt.Errorf("%w: %w",
 				ErrParseGoSource,
 				enum.ErrNoEnumsFound)
 		}
@@ -145,11 +158,11 @@ func extractEnumInfo(ctx context.Context, p *Parser, node *ast.File) (string, en
 	}
 	if len(enInfo.Enums) == 0 {
 		slog.Default().DebugContext(ctx, "no valid enums found")
-		return "", enumInfo{}, fmt.Errorf("%w: %w",
+		return "", enumInfo{}, nil, fmt.Errorf("%w: %w",
 			ErrParseGoSource,
 			enum.ErrNoEnumsFound)
 	}
-	return packageName, enInfo, nil
+	return packageName, enInfo, enumTypeConfigs, nil
 }
 
 func (p *Parser) parseSourceContent(ctx context.Context) (string, *ast.File, error) {
@@ -306,26 +319,26 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 	if vs.Comment != nil && len(vs.Comment.List) > 0 {
 		commentText := vs.Comment.List[0].Text
 		const commentPrefix = "//"
-		if len(commentText) < len(commentPrefix) || !strings.HasPrefix(commentText, commentPrefix) {
+		if len(commentText) < len(commentPrefix) || !gostrings.HasPrefix(commentText, commentPrefix) {
 			return &en
 		}
 		comment := commentText[len(commentPrefix):]
 
 		// Check for semicolon-separated custom comment
-		if strings.Contains(comment, ";") {
-			parts := strings.SplitN(comment, ";", 2)
-			comment = strings.TrimSpace(parts[0])
+		if gostrings.Contains(comment, ";") {
+			parts := gostrings.SplitN(comment, ";", 2)
+			comment = gostrings.TrimSpace(parts[0])
 			if len(parts) > 1 {
-				en.CustomComment = strings.TrimSpace(parts[1])
+				en.CustomComment = gostrings.TrimSpace(parts[1])
 			}
 		}
 
-		valid := !strings.Contains(comment, "invalid")
+		valid := !gostrings.Contains(comment, "invalid")
 		if !valid {
-			comment = strings.ReplaceAll(comment, "invalid", "")
+			comment = gostrings.ReplaceAll(comment, "invalid", "")
 		}
 		en.Valid = valid
-		s1, s2 := strings.SplitBySpace(strings.TrimLeft(comment, " "))
+		s1, s2 := gostrings.SplitBySpace(gostrings.TrimLeft(comment, " "))
 		expectedFields := len(enumIota.Fields)
 		if s1 == "" && s2 == "" {
 			return &en
@@ -374,8 +387,8 @@ func (p *Parser) parseCustomComment(comments []*ast.Comment) string {
 	// Take the second comment as the custom comment
 	secondComment := comments[1].Text
 	const commentPrefix = "//"
-	if len(secondComment) >= len(commentPrefix) && strings.HasPrefix(secondComment, commentPrefix) {
-		return strings.TrimSpace(secondComment[len(commentPrefix):])
+	if len(secondComment) >= len(commentPrefix) && gostrings.HasPrefix(secondComment, commentPrefix) {
+		return gostrings.TrimSpace(secondComment[len(commentPrefix):])
 	}
 	return ""
 }
@@ -396,10 +409,16 @@ func (p *Parser) getEnumInfo(node *ast.File) enumInfo {
 				enumIota := enum.EnumIota{
 					Type: ts.Name.Name,
 				}
+
+				// Extract underlying type
+				if ident, ok := ts.Type.(*ast.Ident); ok {
+					enumIota.UnderlyingType = ident.Name
+				}
+
 				if ts.Comment != nil &&
 					len(ts.Comment.List) > 0 {
 					comment := ts.Comment.List[0].Text
-					if strings.HasPrefix(comment, "//") {
+					if gostrings.HasPrefix(comment, "//") {
 						comment = comment[2:]
 					}
 					opener, closer, fields := enum.ExtractFields(comment)
@@ -418,4 +437,93 @@ func (p *Parser) getEnumInfo(node *ast.File) enumInfo {
 		Imports: imports,
 		Enums:   enumIotas,
 	}
+}
+
+// parseGoEnumsComment parses a "// goenums: arg arg ..." comment and returns the configuration
+func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
+	// Remove "// goenums:" prefix
+	if !gostrings.HasPrefix(comment, "// goenums:") {
+		return config.EnumTypeConfig{}
+	}
+
+	args := gostrings.TrimSpace(comment[len("// goenums:"):])
+	if args == "" {
+		return config.EnumTypeConfig{}
+	}
+
+	// Parse arguments
+	parts := gostrings.Fields(args)
+	cfg := config.EnumTypeConfig{
+		SerializationType: config.SerdeString, // Default
+		Handlers: config.Handlers{
+			SQL: true, // Default SQL support
+		},
+	}
+
+	for _, part := range parts {
+		switch part {
+		case "-json":
+			cfg.Handlers.JSON = true
+		case "-yaml":
+			cfg.Handlers.YAML = true
+		case "-text":
+			cfg.Handlers.Text = true
+		case "-binary":
+			cfg.Handlers.Binary = true
+		case "-uppercaseFields":
+			cfg.UppercaseFields = true
+		case "-genName":
+			cfg.GenerateNameConstants = true
+		case "-serde/string":
+			cfg.SerializationType = config.SerdeString
+		case "-serde/bytes":
+			cfg.SerializationType = config.SerdeBytes
+		case "-serde/primitive":
+			cfg.SerializationType = config.SerdePrimitive
+		}
+	}
+
+	return cfg
+}
+
+// findGoEnumsComment searches for "// goenums:" comment in the source file
+// and returns a map of type names to their configurations
+func (p *Parser) findGoEnumsComments(node *ast.File) map[string]config.EnumTypeConfig {
+	configs := make(map[string]config.EnumTypeConfig)
+
+	// Look for comments in the file
+	for _, commentGroup := range node.Comments {
+		for _, comment := range commentGroup.List {
+			if gostrings.HasPrefix(comment.Text, "// goenums:") {
+				cfg := p.parseGoEnumsComment(comment.Text)
+
+				// Find the next type declaration after this comment
+				typeName := p.findNextTypeDeclaration(node, comment.Pos())
+				if typeName != "" {
+					cfg.TypeName = typeName
+					configs[typeName] = cfg
+				}
+			}
+		}
+	}
+
+	return configs
+}
+
+// findNextTypeDeclaration finds the next type declaration after the given position
+func (p *Parser) findNextTypeDeclaration(node *ast.File, pos token.Pos) string {
+	for _, decl := range node.Decls {
+		if decl.Pos() <= pos {
+			continue
+		}
+
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
+			for _, spec := range genDecl.Specs {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+					return typeSpec.Name.Name
+				}
+			}
+		}
+	}
+	return ""
 }

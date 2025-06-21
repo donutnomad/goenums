@@ -135,8 +135,9 @@ import (
 
 // Define flag groups
 type flags struct {
-	help, version, failfast, legacy, insensitive, verbose, constraints, uppercaseFields, generateNameConstants bool
-	output                                                                                                     string
+	help, version, failfast, legacy, insensitive, verbose, constraints bool
+	output                                                             string
+	// Deprecated: uppercaseFields and generateNameConstants are now specified per-enum-type in goenums comments
 }
 
 func parseFlags() (flags, []string) {
@@ -165,12 +166,13 @@ func parseFlags() (flags, []string) {
 	flag.BoolVar(&f.constraints, "constraints", false,
 		"Specify whether to generate the float and integer constraints or import 'golang.org/x/exp/constraints' (default: false - imports)")
 	flag.BoolVar(&f.constraints, "c", false, "")
-	flag.BoolVar(&f.uppercaseFields, "uppercase-fields", false,
-		"Generate container struct field names in uppercase (e.g., STEP1INITIALIZED) instead of camelCase (default: false - camelCase)")
-	flag.BoolVar(&f.uppercaseFields, "u", false, "")
-	flag.BoolVar(&f.generateNameConstants, "generate-name-constants", false,
-		"Generate enum name constants (e.g., TokenRequestStatusName) instead of string slicing for NamesMap (default: false)")
-	flag.BoolVar(&f.generateNameConstants, "g", false, "")
+	// Deprecated: These flags are now specified per-enum-type in goenums comments
+	// flag.BoolVar(&f.uppercaseFields, "uppercase-fields", false,
+	//	"Generate container struct field names in uppercase (e.g., STEP1INITIALIZED) instead of camelCase (default: false - camelCase)")
+	// flag.BoolVar(&f.uppercaseFields, "u", false, "")
+	// flag.BoolVar(&f.generateNameConstants, "generate-name-constants", false,
+	//	"Generate enum name constants (e.g., TokenRequestStatusName) instead of string slicing for NamesMap (default: false)")
+	// flag.BoolVar(&f.generateNameConstants, "g", false, "")
 	flag.Parse()
 	return f, flag.Args()
 }
@@ -355,15 +357,13 @@ func configuration(ctx context.Context) (config.Configuration, error) {
 	}
 
 	config := config.Configuration{
-		Failfast:              f.failfast,
-		Insensitive:           f.insensitive,
-		Legacy:                f.legacy,
-		Verbose:               f.verbose,
-		OutputFormat:          f.output,
-		Filenames:             filenames,
-		Constraints:           f.constraints,
-		UppercaseFields:       f.uppercaseFields,
-		GenerateNameConstants: f.generateNameConstants,
+		Failfast:     f.failfast,
+		Insensitive:  f.insensitive,
+		Legacy:       f.legacy,
+		Verbose:      f.verbose,
+		OutputFormat: f.output,
+		Filenames:    filenames,
+		Constraints:  f.constraints,
 		Handlers: config.Handlers{
 			JSON:   true,
 			Text:   true,
@@ -371,6 +371,7 @@ func configuration(ctx context.Context) (config.Configuration, error) {
 			YAML:   true,
 			Binary: true,
 		},
+		EnumTypeConfigs: make(map[string]config.EnumTypeConfig),
 	}
 	return config, nil
 }

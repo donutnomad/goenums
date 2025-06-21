@@ -12,6 +12,40 @@
 // system, ensuring all components respect the same settings.
 package config
 
+// SerializationType defines the type of serialization/deserialization to use
+type SerializationType int
+
+const (
+	// SerdeString uses string representation (default)
+	SerdeString SerializationType = iota
+	// SerdeBytes uses byte representation
+	SerdeBytes
+	// SerdePrimitive uses the underlying primitive type (int, float, etc.)
+	SerdePrimitive
+)
+
+// EnumTypeConfig holds configuration for a specific enum type
+type EnumTypeConfig struct {
+	// TypeName is the name of the enum type
+	TypeName string
+
+	// UppercaseFields controls whether container struct field names should be uppercase.
+	// When true, field names like STEP1INITIALIZED are generated.
+	// When false (default), field names like Step1Initialized are generated in camelCase.
+	UppercaseFields bool
+
+	// GenerateNameConstants controls whether to generate enum name constants.
+	// When true, generates a string type (e.g., TokenRequestStatusName) with const values
+	// for each enum name, and uses these constants in the NamesMap instead of string slicing.
+	GenerateNameConstants bool
+
+	// Handlers defines which interfaces to implement for this enum type
+	Handlers Handlers
+
+	// SerializationType defines how this enum should be serialized/deserialized
+	SerializationType SerializationType
+}
+
 // Configuration holds all the settings that control enum generation behavior.
 // It is passed to both parsers and generators to ensure consistent behavior
 // throughout the generation process.
@@ -44,18 +78,27 @@ type Configuration struct {
 	// Constraints is the flag to generate the constraints or not
 	Constraints bool
 
-	// UppercaseFields controls whether container struct field names should be uppercase.
-	// When true, field names like STEP1INITIALIZED are generated.
-	// When false (default), field names like Step1Initialized are generated in camelCase.
-	UppercaseFields bool
-
-	// GenerateNameConstants controls whether to generate enum name constants.
-	// When true, generates a string type (e.g., TokenRequestStatusName) with const values
-	// for each enum name, and uses these constants in the NamesMap instead of string slicing.
-	GenerateNameConstants bool
-
 	// Handlers defines the behavior of the enum generation process.
+	// DEPRECATED: Use EnumTypeConfigs instead for per-type configuration
 	Handlers Handlers
+
+	// EnumTypeConfigs holds configuration for individual enum types
+	// This allows different enum types in the same file to have different configurations
+	EnumTypeConfigs map[string]EnumTypeConfig
+}
+
+// GetEnumTypeConfig returns the configuration for a specific enum type
+// Falls back to global configuration if no specific config is found
+func (c *Configuration) GetEnumTypeConfig(typeName string) EnumTypeConfig {
+	if config, exists := c.EnumTypeConfigs[typeName]; exists {
+		return config
+	}
+
+	// Fallback to global configuration for backward compatibility
+	return EnumTypeConfig{
+		TypeName:          typeName,
+		SerializationType: SerdeString, // Default to string serialization
+	}
 }
 
 type Handlers struct {

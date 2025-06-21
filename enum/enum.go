@@ -108,9 +108,6 @@ func (r GenerationRequest) Command() string {
 	if r.Configuration.Constraints {
 		b.WriteString(" -c")
 	}
-	if r.Configuration.UppercaseFields {
-		b.WriteString(" -u")
-	}
 	if r.Configuration.Verbose {
 		b.WriteString(" -vv")
 	}
@@ -149,6 +146,8 @@ func (r GenerationRequest) Command() string {
 type EnumIota struct {
 	// Type is the name of the enum type (e.g., "Status", "Color")
 	Type string
+	// UnderlyingType is the underlying type (e.g., "int", "float32", "string")
+	UnderlyingType string
 	// Comment is the documentation comment associated with the enum type
 	Comment string
 	// Fields defines custom fields that each enum value can have
