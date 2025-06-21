@@ -182,6 +182,8 @@ func (p *Parser) getPackageName(node *ast.File) string {
 func (p *Parser) getEnums(node *ast.File, enumIota *enum.EnumIota) []enum.Enum {
 	var enums []enum.Enum
 	iotaFound := false
+	typeFound := false // Track if we found constants with the same type
+
 	for _, decl := range node.Decls {
 		t, ok := decl.(*ast.GenDecl)
 		if !ok {
@@ -193,7 +195,7 @@ func (p *Parser) getEnums(node *ast.File, enumIota *enum.EnumIota) []enum.Enum {
 			if !ok {
 				continue
 			}
-			e := p.getEnum(vs, &idx, enumIota, &iotaFound)
+			e := p.getEnum(vs, &idx, enumIota, &iotaFound, &typeFound) // Pass typeFound parameter
 			if e == nil {
 				continue
 			}
@@ -201,13 +203,14 @@ func (p *Parser) getEnums(node *ast.File, enumIota *enum.EnumIota) []enum.Enum {
 			slog.Default().Debug("enum", "enum", e)
 		}
 	}
-	if !iotaFound {
+	// Modified condition: consider valid if either iota or same type constants are found
+	if !iotaFound && !typeFound {
 		return nil
 	}
 	return enums
 }
 
-func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, iotaFound *bool) *enum.Enum {
+func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, iotaFound *bool, typeFound *bool) *enum.Enum {
 	if len(vs.Names) == 0 {
 		slog.Default().Debug("valuespec has no names")
 		return nil
@@ -231,6 +234,7 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 		if t.Name != enumIota.Type {
 			return nil
 		}
+		*typeFound = true
 	}
 	name := vs.Names[0].Name
 	if name == "_" {
@@ -240,36 +244,58 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 	en := enum.Enum{
 		Name: vs.Names[0].Name,
 	}
-	for _, v := range vs.Values {
-		t, ok := v.(*ast.BinaryExpr)
-		if !ok {
-			continue
+
+	// Handle direct numeric assignment
+	hasDirectValue := false
+	if len(vs.Values) > 0 {
+		// Check if it's a direct numeric assignment
+		if basicLit, ok := vs.Values[0].(*ast.BasicLit); ok && basicLit.Kind == token.INT {
+			val, err := strconv.Atoi(basicLit.Value)
+			if err == nil {
+				en.Index = val
+				hasDirectValue = true
+				// Don't return here, continue processing comments
+			}
 		}
-		x, ok := t.X.(*ast.Ident)
-		if !ok {
-			return nil
-		}
-		if x.Name != iotaIdentifier {
-			return nil
-		} else {
-			*iotaFound = true
-		}
-		y, ok := t.Y.(*ast.BasicLit)
-		if !ok {
-			return nil
-		}
-		if y.Kind != token.INT {
-			return nil
-		}
-		val, err := strconv.Atoi(y.Value)
-		if err != nil {
-			return nil
-		}
-		*idx = val
-		enumIota.StartIndex = *idx
 	}
-	en.Index = *idx
-	*idx++
+
+	// Original iota processing logic
+	if !hasDirectValue {
+		for _, v := range vs.Values {
+			t, ok := v.(*ast.BinaryExpr)
+			if !ok {
+				continue
+			}
+			x, ok := t.X.(*ast.Ident)
+			if !ok {
+				return nil
+			}
+			if x.Name != iotaIdentifier {
+				return nil
+			} else {
+				*iotaFound = true
+			}
+			y, ok := t.Y.(*ast.BasicLit)
+			if !ok {
+				return nil
+			}
+			if y.Kind != token.INT {
+				return nil
+			}
+			val, err := strconv.Atoi(y.Value)
+			if err != nil {
+				return nil
+			}
+			*idx = val
+			enumIota.StartIndex = *idx
+		}
+
+		// If no direct assignment found, use index
+		if len(vs.Values) == 0 {
+			en.Index = *idx
+			*idx++
+		}
+	}
 
 	// Process custom comments from doc comments (above the constant)
 	if vs.Doc != nil && len(vs.Doc.List) > 0 {
