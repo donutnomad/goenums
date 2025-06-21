@@ -454,7 +454,7 @@ func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
 	// Parse arguments
 	parts := gostrings.Fields(args)
 	cfg := config.EnumTypeConfig{
-		SerializationType: config.SerdeString, // Default
+		SerializationType: config.SerdeName, // Default
 		Handlers: config.Handlers{
 			SQL: true, // Default SQL support
 		},
@@ -474,12 +474,10 @@ func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
 			cfg.UppercaseFields = true
 		case "-genName":
 			cfg.GenerateNameConstants = true
-		case "-serde/string":
-			cfg.SerializationType = config.SerdeString
-		case "-serde/bytes":
-			cfg.SerializationType = config.SerdeBytes
-		case "-serde/primitive":
-			cfg.SerializationType = config.SerdePrimitive
+		case "-serde/name":
+			cfg.SerializationType = config.SerdeName
+		case "-serde/value":
+			cfg.SerializationType = config.SerdeValue
 		}
 	}
 

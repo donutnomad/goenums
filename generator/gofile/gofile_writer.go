@@ -108,20 +108,18 @@ func (g *Writer) writeEnumGenerationRequest(req enum.GenerationRequest) {
 	g.writeInvalidEnumDefinition(req)
 	g.writeAllSliceMethod(req)
 	g.writeIsValidFunction(req)
+	g.writeStringMethod(req)
 
 	// Implement Enum interface methods
 	g.writeEnumInterfaceMethods(req)
-
-	// Add convenience methods for container type
-	g.writeContainerConvenienceMethods(req)
-
 	// Directly implement serialization interface methods, calling functions in serde.go
 	g.writeSerializationMethods(req)
 
 	if req.Configuration.Constraints {
 		g.writeConstraints(req)
 	}
-	g.writeStringMethod(req)
+	// Add convenience methods for container type
+	g.writeContainerConvenienceMethods(req)
 	g.writeCompileCheck(req)
 }
 
@@ -150,11 +148,7 @@ var (
 // MarshalJSON implements the json.Marshaler interface for {{ .WrapperName }}.
 // It returns the JSON representation of the enum value as a byte slice.
 func ({{ .Receiver }} {{ .WrapperName }}) MarshalJSON() ([]byte, error) {
-	{{- if eq .SerializationType "string" }}
-	return []byte( "\"" + {{ .Receiver }}.String() + "\""), nil 
-	{{- else if eq .SerializationType "bytes" }}
-	return []byte({{ .Receiver }}.String()), nil
-	{{- else if eq .SerializationType "primitive" }}
+	{{- if eq .SerializationType "value" }}
 	return json.Marshal({{ .UnderlyingType }}({{ .Receiver }}.{{ .EnumIota }}))
 	{{- else }}
 	return []byte( "\"" + {{ .Receiver }}.String() + "\""), nil 
@@ -168,22 +162,7 @@ func ({{ .Receiver }} {{ .WrapperName }}) MarshalJSON() ([]byte, error) {
 // It parses the JSON representation of the enum value from the byte slice.
 // It returns an error if the input is not a valid JSON representation.
 func ({{ .Receiver }} *{{ .WrapperName }}) UnmarshalJSON(b []byte) error {
-	{{- if eq .SerializationType "string" }}
-	b = bytes.Trim(bytes.Trim(b, "\""), "\"")
-	new{{ .Receiver }}, err := Parse{{ .WrapperName }}(b)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}
-	return nil
-	{{- else if eq .SerializationType "bytes" }}
-	new{{ .Receiver }}, err := Parse{{ .WrapperName }}(b)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}
-	return nil
-	{{- else if eq .SerializationType "primitive" }}
+	{{- if eq .SerializationType "value" }}
 	var value {{ .UnderlyingType }}
 	if err := json.Unmarshal(b, &value); err != nil {
 		return err
@@ -210,14 +189,10 @@ func ({{ .Receiver }} *{{ .WrapperName }}) UnmarshalJSON(b []byte) error {
 // MarshalText implements the encoding.TextMarshaler interface for {{ .WrapperName }}.
 // It returns the appropriate representation of the enum value as a byte slice
 func ({{ .Receiver }} {{ .WrapperName }}) MarshalText() ([]byte, error) {
-	{{- if eq .SerializationType "string" }}
-	return []byte("\"" + {{ .Receiver }}.String() + "\""), nil
-	{{- else if eq .SerializationType "bytes" }}
-	return []byte({{ .Receiver }}.String()), nil
-	{{- else if eq .SerializationType "primitive" }}
+	{{- if eq .SerializationType "value" }}
 	return []byte(fmt.Sprintf("%v", {{ .UnderlyingType }}({{ .Receiver }}.{{ .EnumIota }}))), nil
 	{{- else }}
-	return []byte("\"" + {{ .Receiver }}.String() + "\""), nil
+	return []byte({{ .Receiver }}.String()), nil
 	{{- end }}
 }
 `
@@ -237,14 +212,12 @@ func newInterfaceFunctionData(rep enum.GenerationRequest) interfaceFunctionData 
 	enumConfig := rep.Configuration.GetEnumTypeConfig(rep.EnumIota.Type)
 	var serdeType string
 	switch enumConfig.SerializationType {
-	case config.SerdeString:
-		serdeType = "string"
-	case config.SerdeBytes:
-		serdeType = "bytes"
-	case config.SerdePrimitive:
-		serdeType = "primitive"
+	case config.SerdeName:
+		serdeType = "name"
+	case config.SerdeValue:
+		serdeType = "value"
 	default:
-		serdeType = "string"
+		serdeType = "name"
 	}
 
 	return interfaceFunctionData{
@@ -304,201 +277,6 @@ func mapToSQLType(goType string) string {
 		// For custom types or unknown types, default to int64
 		return "int64"
 	}
-}
-
-func (g *Writer) writeJSONMarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(jsonMarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-func (g *Writer) writeJSONUnmarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(jsonUnmarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-var (
-	textMarshalTemplate = template.Must(template.New("textMarshal").Parse(textMarshalStr))
-
-	textUnmarshalStr = `
-// UnmarshalText implements the encoding.TextUnmarshaler interface for {{ .WrapperName }}.
-// It parses the representation of the enum value from the byte slice.
-// It returns an error if the byte slice does not contain a valid enum value.
-func ({{ .Receiver }} *{{ .WrapperName }}) UnmarshalText(data []byte) error {
-	{{- if eq .SerializationType "primitive" }}
-	// For primitive serialization, try to parse as number first
-	if len(data) > 0 && (data[0] >= '0' && data[0] <= '9') || data[0] == '-' {
-		var value {{ .UnderlyingType }}
-		if err := json.Unmarshal(data, &value); err == nil {
-			new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}Number({{ .EnumIota }}(value))
-			if err != nil {
-				return err
-			}
-			*{{ .Receiver }} = new{{ .Receiver }}Val
-			return nil
-		}
-	}
-	// Fall back to string parsing
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(data)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- else }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(data)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- end }}
-}
-`
-	textUnmarshalTemplate = template.Must(template.New("textUnmarshal").Parse(textUnmarshalStr))
-)
-
-func (g *Writer) writeTextMarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(textMarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-func (g *Writer) writeTextUnmarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(textUnmarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-var (
-	binaryMarshalStr = `
-// MarshalBinary implements the encoding.BinaryMarshaler interface for {{ .WrapperName }}.
-// It returns the binary representation of the enum value as a byte slice.
-func ({{ .Receiver }} {{ .WrapperName }}) MarshalBinary() ([]byte, error) {
-	{{- if eq .SerializationType "string" }}
-	return []byte("\"" + {{ .Receiver }}.String() + "\""), nil
-	{{- else if eq .SerializationType "bytes" }}
-	return []byte({{ .Receiver }}.String()), nil
-	{{- else if eq .SerializationType "primitive" }}
-	{{- if or (eq .UnderlyingType "float32") (eq .UnderlyingType "float64") }}
-	return binary.LittleEndian.AppendUint64(nil, math.Float64bits(float64({{ .Receiver }}.{{ .EnumIota }}))), nil
-	{{- else }}
-	return binary.LittleEndian.AppendUint64(nil, uint64({{ .Receiver }}.{{ .EnumIota }})), nil
-	{{- end }}
-	{{- else }}
-	return []byte("\"" + {{ .Receiver }}.String() + "\""), nil
-	{{- end }}
-}
-`
-	binaryMarshalTemplate = template.Must(template.New("binaryMarshal").Parse(binaryMarshalStr))
-
-	binaryUnmarshalStr = `
-// UnmarshalBinary implements the encoding.BinaryUnmarshaler interface for {{ .WrapperName }}.
-// It parses the binary representation of the enum value from the byte slice.
-// It returns an error if the byte slice does not contain a valid enum value.
-func ({{ .Receiver }} *{{ .WrapperName }}) UnmarshalBinary(data []byte) error {
-	{{- if eq .SerializationType "string" }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(data)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- else if eq .SerializationType "bytes" }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(data)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- else if eq .SerializationType "primitive" }}
-	if len(data) < 8 {
-		return fmt.Errorf("binary data too short")
-	}
-	{{- if or (eq .UnderlyingType "float32") (eq .UnderlyingType "float64") }}
-	rawValue := binary.LittleEndian.Uint64(data)
-	floatValue := math.Float64frombits(rawValue)
-	value := {{ .EnumIota }}({{ .UnderlyingType }}(floatValue))
-	{{- else }}
-	value := {{ .EnumIota }}({{ .UnderlyingType }}(binary.LittleEndian.Uint64(data)))
-	{{- end }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}Number(value)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- else }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(data)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- end }}
-}
-`
-	binaryUnmarshalTemplate = template.Must(template.New("binaryUnmarshal").Parse(binaryUnmarshalStr))
-)
-
-func (g *Writer) writeBinaryMarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(binaryMarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-func (g *Writer) writeBinaryUnmarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(binaryUnmarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-var (
-	yamlMarshalStr = `
-// MarshalYAML implements the yaml.Marshaler interface for {{ .WrapperName }}.
-// It returns the appropriate representation of the enum value for YAML serialization.
-func ({{ .Receiver }} {{ .WrapperName }}) MarshalYAML() ([]byte, error) {
-	{{- if eq .SerializationType "primitive" }}
-	return []byte(fmt.Sprintf("%v", {{ .UnderlyingType }}({{ .Receiver }}.{{ .EnumIota }}))), nil
-	{{- else }}
-	return []byte({{ .Receiver }}.String()), nil
-	{{- end }}
-}
-`
-	yamlMarshalTemplate = template.Must(template.New("yamlMarshal").Parse(yamlMarshalStr))
-
-	yamlUnmarshalStr = `
-// UnmarshalYAML implements the yaml.Unmarshaler interface for {{ .WrapperName }}.
-// It parses the YAML byte slice representation of the enum value and returns an error 
-// if the YAML byte slice does not contain a valid enum value.
-func ({{ .Receiver }} *{{ .WrapperName }}) UnmarshalYAML(b []byte) error {
-	{{- if eq .SerializationType "primitive" }}
-	// For primitive serialization, try to parse as number first
-	if len(b) > 0 && (b[0] >= '0' && b[0] <= '9') || b[0] == '-' {
-		var value {{ .UnderlyingType }}
-		if err := json.Unmarshal(b, &value); err == nil {
-			new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}Number({{ .EnumIota }}(value))
-			if err == nil {
-				*{{ .Receiver }} = new{{ .Receiver }}Val
-				return nil
-			}
-		}
-	}
-	// Fall back to string parsing
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(b)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- else }}
-	new{{ .Receiver }}Val, err := Parse{{ .WrapperName }}(b)
-	if err != nil {
-		return err
-	}
-	*{{ .Receiver }} = new{{ .Receiver }}Val
-	return nil
-	{{- end }}
-}
-`
-	yamlUnmarshalTemplate = template.Must(template.New("yamlUnmarshal").Parse(yamlUnmarshalStr))
-)
-
-func (g *Writer) writeYAMLMarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(yamlMarshalTemplate, newInterfaceFunctionData(rep))
-}
-
-func (g *Writer) writeYAMLUnmarshalMethod(rep enum.GenerationRequest) {
-	g.writeTemplate(yamlUnmarshalTemplate, newInterfaceFunctionData(rep))
 }
 
 var (
@@ -1376,7 +1154,7 @@ func ({{ .Receiver }} {{ .WrapperName }}) FindByValue(value {{ .UnderlyingType }
 // Format implements the Enum interface.
 // It returns the format used for serialization.
 func ({{ .Receiver }} {{ .WrapperName }}) Format() enums.Format {
-	{{- if eq .SerializationType "primitive" }}
+	{{- if eq .SerializationType "value" }}
 	return enums.FormatValue
 	{{- else }}
 	return enums.FormatName
@@ -1392,7 +1170,7 @@ func ({{ .Receiver }} {{ .WrapperName }}) Name() string {
 	if str, ok := {{ .EnumLower }}NamesMap[{{ .Receiver }}]; ok {
 		return str
 	}
-	return ""
+	return fmt.Sprintf("{{ .EnumLower }}(%v)", {{ .Receiver }}.{{ .EnumIota }})
 }
 `
 	enumNameMethodTemplate = template.Must(template.New("enumNameMethod").Parse(enumNameMethodStr))
@@ -1413,14 +1191,12 @@ func newEnumInterfaceMethodData(rep enum.GenerationRequest) enumInterfaceMethodD
 	enumConfig := rep.Configuration.GetEnumTypeConfig(rep.EnumIota.Type)
 	var serdeType string
 	switch enumConfig.SerializationType {
-	case config.SerdeString:
-		serdeType = "string"
-	case config.SerdeBytes:
-		serdeType = "bytes"
-	case config.SerdePrimitive:
-		serdeType = "primitive"
+	case config.SerdeName:
+		serdeType = "name"
+	case config.SerdeValue:
+		serdeType = "value"
 	default:
-		serdeType = "string"
+		serdeType = "name"
 	}
 
 	return enumInterfaceMethodData{

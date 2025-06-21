@@ -16,12 +16,10 @@ package config
 type SerializationType int
 
 const (
-	// SerdeString uses string representation (default)
-	SerdeString SerializationType = iota
-	// SerdeBytes uses byte representation
-	SerdeBytes
-	// SerdePrimitive uses the underlying primitive type (int, float, etc.)
-	SerdePrimitive
+	// SerdeName uses name representation (default)
+	SerdeName SerializationType = iota
+	// SerdeValue uses the underlying value type (int, float, etc.)
+	SerdeValue
 )
 
 // EnumTypeConfig holds configuration for a specific enum type
@@ -97,7 +95,7 @@ func (c *Configuration) GetEnumTypeConfig(typeName string) EnumTypeConfig {
 	// Fallback to global configuration for backward compatibility
 	return EnumTypeConfig{
 		TypeName:          typeName,
-		SerializationType: SerdeString, // Default to string serialization
+		SerializationType: SerdeName, // Default to name serialization
 	}
 }
 
