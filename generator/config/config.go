@@ -49,6 +49,11 @@ type Configuration struct {
 	// When false (default), field names like Step1Initialized are generated in camelCase.
 	UppercaseFields bool
 
+	// GenerateNameConstants controls whether to generate enum name constants.
+	// When true, generates a string type (e.g., TokenRequestStatusName) with const values
+	// for each enum name, and uses these constants in the NamesMap instead of string slicing.
+	GenerateNameConstants bool
+
 	// Handlers defines the behavior of the enum generation process.
 	Handlers Handlers
 }

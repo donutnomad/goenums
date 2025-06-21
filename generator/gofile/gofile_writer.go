@@ -387,6 +387,28 @@ func (g *Writer) writeCompileCheck(rep enum.GenerationRequest) {
 
 var (
 	stringMethodStr = `
+{{- if .GenerateNameConstants }}
+// {{ .WrapperName }}Name is a string type for enum name constants
+type {{ .WrapperName }}Name string
+
+// {{ .WrapperName }} name constants
+const (
+    {{- range .EnumDefs }}
+    {{- if .Aliases }}
+    {{ $.WrapperName }}Name{{ .EnumNameIdentifier }} {{ $.WrapperName }}Name = "{{ index .Aliases 0 }}"
+    {{- else }}
+    {{ $.WrapperName }}Name{{ .EnumNameIdentifier }} {{ $.WrapperName }}Name = "{{ .EnumName }}"
+    {{- end }}
+    {{- end }}
+)
+
+// {{ .EnumLower }}NamesMap is a map of enum values to their canonical absolute names
+var {{ .EnumLower }}NamesMap = map[{{ .WrapperName }}]string{
+    {{- range .EnumDefs }}
+    {{ $.EnumType }}.{{ .EnumNameIdentifier }}: string({{ $.WrapperName }}Name{{ .EnumNameIdentifier }}),
+    {{- end }}
+}
+{{- else }}
 // {{ .EnumLower }}Names is a constant string slice containing all enum values cononical absolute names
 const {{ .EnumLower }}Names = "{{ .NameString }}"
 
@@ -397,6 +419,7 @@ var {{ .EnumLower }}NamesMap = map[{{ .WrapperName }}]string{
     {{ $.EnumType }}.{{ .EnumNameIdentifier }}: {{ $.EnumLower }}Names[{{ index $.NameOffsets .EnumNameIdentifier "start" }}:{{ index $.NameOffsets .EnumNameIdentifier "end" }}],
     {{- end }}
 }
+{{- end }}
 
 // String implements the Stringer interface.
 // It returns the canonical absolute name of the enum value.
@@ -411,16 +434,17 @@ func ({{ .Receiver }} {{ .WrapperName }}) String() string {
 )
 
 type stringMethodData struct {
-	Receiver        string
-	WrapperName     string
-	EnumLower       string
-	EnumIota        string
-	EnumType        string
-	NameString      string
-	EnumDefs        []enumDefinition
-	NameOffsets     map[string]map[string]int
-	ContainerName   string
-	CaseInsensitive bool
+	Receiver              string
+	WrapperName           string
+	EnumLower             string
+	EnumIota              string
+	EnumType              string
+	NameString            string
+	EnumDefs              []enumDefinition
+	NameOffsets           map[string]map[string]int
+	ContainerName         string
+	CaseInsensitive       bool
+	GenerateNameConstants bool
 }
 
 func (g *Writer) writeStringMethod(rep enum.GenerationRequest) {
@@ -449,15 +473,16 @@ func (g *Writer) writeStringMethod(rep enum.GenerationRequest) {
 		}
 	}
 	d := stringMethodData{
-		Receiver:        receiver(rep.EnumIota.Type),
-		WrapperName:     wrapperName(rep.EnumIota.Type),
-		EnumLower:       strings.ToLower(rep.EnumIota.Type),
-		EnumIota:        rep.EnumIota.Type,
-		EnumType:        enumType(rep),
-		NameString:      names.String(),
-		EnumDefs:        edefs,
-		NameOffsets:     nameOffsetsForTemplate,
-		CaseInsensitive: rep.Configuration.Insensitive,
+		Receiver:              receiver(rep.EnumIota.Type),
+		WrapperName:           wrapperName(rep.EnumIota.Type),
+		EnumLower:             strings.ToLower(rep.EnumIota.Type),
+		EnumIota:              rep.EnumIota.Type,
+		EnumType:              enumType(rep),
+		NameString:            names.String(),
+		EnumDefs:              edefs,
+		NameOffsets:           nameOffsetsForTemplate,
+		CaseInsensitive:       rep.Configuration.Insensitive,
+		GenerateNameConstants: rep.Configuration.GenerateNameConstants,
 	}
 	g.writeTemplate(stringMethodTemplate, d)
 }

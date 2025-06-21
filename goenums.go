@@ -135,8 +135,8 @@ import (
 
 // Define flag groups
 type flags struct {
-	help, version, failfast, legacy, insensitive, verbose, constraints, uppercaseFields bool
-	output                                                                              string
+	help, version, failfast, legacy, insensitive, verbose, constraints, uppercaseFields, generateNameConstants bool
+	output                                                                                                     string
 }
 
 func parseFlags() (flags, []string) {
@@ -168,6 +168,9 @@ func parseFlags() (flags, []string) {
 	flag.BoolVar(&f.uppercaseFields, "uppercase-fields", false,
 		"Generate container struct field names in uppercase (e.g., STEP1INITIALIZED) instead of camelCase (default: false - camelCase)")
 	flag.BoolVar(&f.uppercaseFields, "u", false, "")
+	flag.BoolVar(&f.generateNameConstants, "generate-name-constants", false,
+		"Generate enum name constants (e.g., TokenRequestStatusName) instead of string slicing for NamesMap (default: false)")
+	flag.BoolVar(&f.generateNameConstants, "g", false, "")
 	flag.Parse()
 	return f, flag.Args()
 }
@@ -352,14 +355,15 @@ func configuration(ctx context.Context) (config.Configuration, error) {
 	}
 
 	config := config.Configuration{
-		Failfast:        f.failfast,
-		Insensitive:     f.insensitive,
-		Legacy:          f.legacy,
-		Verbose:         f.verbose,
-		OutputFormat:    f.output,
-		Filenames:       filenames,
-		Constraints:     f.constraints,
-		UppercaseFields: f.uppercaseFields,
+		Failfast:              f.failfast,
+		Insensitive:           f.insensitive,
+		Legacy:                f.legacy,
+		Verbose:               f.verbose,
+		OutputFormat:          f.output,
+		Filenames:             filenames,
+		Constraints:           f.constraints,
+		UppercaseFields:       f.uppercaseFields,
+		GenerateNameConstants: f.generateNameConstants,
 		Handlers: config.Handlers{
 			JSON:   true,
 			Text:   true,
