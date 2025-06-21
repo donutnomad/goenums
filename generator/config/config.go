@@ -44,6 +44,11 @@ type Configuration struct {
 	// Constraints is the flag to generate the constraints or not
 	Constraints bool
 
+	// UppercaseFields controls whether container struct field names should be uppercase.
+	// When true, field names like STEP1INITIALIZED are generated.
+	// When false (default), field names like Step1Initialized are generated in camelCase.
+	UppercaseFields bool
+
 	// Handlers defines the behavior of the enum generation process.
 	Handlers Handlers
 }

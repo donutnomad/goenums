@@ -581,7 +581,7 @@ func (g *Writer) writeWrapperDefinition(enum enum.GenerationRequest) {
 	}
 	for i, e := range enum.EnumIota.Enums {
 		cenums[i] = cenum{
-			Name:          strings.ToUpper(e.Name),
+			Name:          generateEnumNameIdentifier(e.Name, enum.Configuration.UppercaseFields),
 			EnumType:      wName,
 			CustomComment: e.CustomComment,
 		}
@@ -768,7 +768,7 @@ func enumDefinitions(rep enum.GenerationRequest) []enumDefinition {
 		}
 		edefs = append(edefs, enumDefinition{
 			EnumName:           e.Name,
-			EnumNameIdentifier: strings.ToUpper(e.Name),
+			EnumNameIdentifier: generateEnumNameIdentifier(e.Name, rep.Configuration.UppercaseFields),
 			EnumType:           wrapperName(rep.EnumIota.Type),
 			Fields:             ffields,
 			IotaType:           rep.EnumIota.Type,
@@ -1050,4 +1050,14 @@ func (g *Writer) writeRawTypeAlias(rep enum.GenerationRequest) {
 		EnumType:    rep.EnumIota.Type,
 	}
 	g.writeTemplate(rawTypeAliasTemplate, data)
+}
+
+// generateEnumNameIdentifier generates the field name identifier for container struct fields.
+// If uppercaseFields is true, it returns the name in uppercase (e.g., STEP1INITIALIZED).
+// If false, it returns the name in camelCase (e.g., Step1Initialized).
+func generateEnumNameIdentifier(name string, uppercaseFields bool) string {
+	if uppercaseFields {
+		return strings.ToUpper(name)
+	}
+	return strings.Camel(name)
 }

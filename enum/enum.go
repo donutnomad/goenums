@@ -108,6 +108,9 @@ func (r GenerationRequest) Command() string {
 	if r.Configuration.Constraints {
 		b.WriteString(" -c")
 	}
+	if r.Configuration.UppercaseFields {
+		b.WriteString(" -u")
+	}
 	if r.Configuration.Verbose {
 		b.WriteString(" -vv")
 	}
