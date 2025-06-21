@@ -21,6 +21,10 @@ Documentation is available at [https://zarldev.github.io/goenums](https://zarlde
   - [Custom String Representations](#custom-string-representations)
     - [Standard Name Comment](#standard-name-comment)
     - [Name Comment with spaces](#name-comment-with-spaces)
+  - [Custom Comments for Generated Code](#custom-comments-for-generated-code)
+    - [Multi-line Comment Format](#multi-line-comment-format)
+    - [Single-line Comment Format with Semicolon](#single-line-comment-format-with-semicolon)
+    - [Generated Output](#generated-output)
   - [Extended Enum Types with Custom Fields](#extended-enum-types-with-custom-fields)
   - [Case Insensitive String Parsing](#case-insensitive-string-parsing)
   - [JSON, Text, Binary, YAML, and Database Storage](#json-text-binary-yaml-and-database-storage)
@@ -133,6 +137,73 @@ const (
 	closed                   // "CLOSED"
 )
 ```
+
+## Custom Comments for Generated Code
+
+Add custom comments to your generated enum structures using two supported formats:
+
+### Multi-line Comment Format
+Place custom comments above enum constants:
+
+```go
+type status int
+
+//go:generate goenums status.go
+const (
+    // invalid UNKNOWN
+    // This is a custom comment for unknown status
+    unknown   status = iota
+    // FAILED
+    // This represents a failed operation
+    failed                  
+    passed                  // PASSED
+)
+```
+
+### Single-line Comment Format with Semicolon
+Add custom comments after the standard enum name using semicolon separation:
+
+```go
+type status int
+
+//go:generate goenums status.go
+const (
+    unknown   status = iota // invalid UNKNOWN
+    failed                  // FAILED
+    passed                  // PASSED; This is a single-line custom comment
+    skipped                 // SKIPPED
+)
+```
+
+### Generated Output
+The custom comments appear in the generated struct definition:
+
+```go
+// Generated container struct with custom comments
+type statusesContainer struct {
+    UNKNOWN   Status // This is a custom comment for unknown status
+    FAILED    Status // This represents a failed operation  
+    PASSED    Status // This is a single-line custom comment
+    SKIPPED   Status
+}
+
+// Container instance without comments for clean initialization
+var Statuses = statusesContainer{
+    UNKNOWN: Status{
+        status: unknown,
+    },
+    FAILED: Status{
+        status: failed,
+    },
+    PASSED: Status{
+        status: passed,
+    },
+    SKIPPED: Status{
+        status: skipped,
+    },
+}
+```
+
 ## Extended Enum Types with Custom Fields
 Add custom fields to your enums with type comments:
 

@@ -270,7 +270,13 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 	}
 	en.Index = *idx
 	*idx++
-	// get comment if exists and set descriptio
+
+	// Process custom comments from doc comments (above the constant)
+	if vs.Doc != nil && len(vs.Doc.List) > 0 {
+		en.CustomComment = p.parseCustomComment(vs.Doc.List)
+	}
+
+	// get comment if exists and set description
 	if vs.Comment != nil && len(vs.Comment.List) > 0 {
 		commentText := vs.Comment.List[0].Text
 		const commentPrefix = "//"
@@ -278,6 +284,16 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 			return &en
 		}
 		comment := commentText[len(commentPrefix):]
+
+		// Check for semicolon-separated custom comment
+		if strings.Contains(comment, ";") {
+			parts := strings.SplitN(comment, ";", 2)
+			comment = strings.TrimSpace(parts[0])
+			if len(parts) > 1 {
+				en.CustomComment = strings.TrimSpace(parts[1])
+			}
+		}
+
 		valid := !strings.Contains(comment, "invalid")
 		if !valid {
 			comment = strings.ReplaceAll(comment, "invalid", "")
@@ -319,6 +335,23 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 type enumInfo struct {
 	Imports []string
 	Enums   []enum.EnumIota
+}
+
+// parseCustomComment extracts custom comments from doc comment list
+// It looks for the second comment line as the custom comment
+func (p *Parser) parseCustomComment(comments []*ast.Comment) string {
+	if len(comments) < 2 {
+		return ""
+	}
+
+	// Skip the first comment (which contains the enum name/value)
+	// Take the second comment as the custom comment
+	secondComment := comments[1].Text
+	const commentPrefix = "//"
+	if len(secondComment) >= len(commentPrefix) && strings.HasPrefix(secondComment, commentPrefix) {
+		return strings.TrimSpace(secondComment[len(commentPrefix):])
+	}
+	return ""
 }
 
 func (p *Parser) getEnumInfo(node *ast.File) enumInfo {

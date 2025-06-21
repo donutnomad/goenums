@@ -538,8 +538,9 @@ type field struct {
 }
 
 type cenum struct {
-	Name     string
-	EnumType string
+	Name          string
+	EnumType      string
+	CustomComment string
 }
 
 var (
@@ -557,7 +558,7 @@ type {{ .WrapperName }} struct {
 // It is private and should not be used directly use the public methods on the {{.WrapperName}} type.
 type {{ .EnumContainerName }} struct {
   {{- range .Enums }}
-  {{ .Name }} {{ .EnumType }}
+  {{ .Name }} {{ .EnumType }}{{- if .CustomComment }} // {{ .CustomComment }}{{- end }}
   {{- end }}
 }
 `
@@ -580,8 +581,9 @@ func (g *Writer) writeWrapperDefinition(enum enum.GenerationRequest) {
 	}
 	for i, e := range enum.EnumIota.Enums {
 		cenums[i] = cenum{
-			Name:     strings.ToUpper(e.Name),
-			EnumType: wName,
+			Name:          strings.ToUpper(e.Name),
+			EnumType:      wName,
+			CustomComment: e.CustomComment,
 		}
 	}
 
@@ -772,6 +774,7 @@ func enumDefinitions(rep enum.GenerationRequest) []enumDefinition {
 			IotaType:           rep.EnumIota.Type,
 			Aliases:            aliases,
 			Valid:              e.Valid,
+			CustomComment:      e.CustomComment,
 		})
 	}
 	return edefs
@@ -917,6 +920,7 @@ type enumDefinition struct {
 	Fields             []enum.Field
 	Aliases            []string
 	Valid              bool
+	CustomComment      string
 }
 
 var (

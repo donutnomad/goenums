@@ -213,6 +213,8 @@ type Enum struct {
 	Aliases []string
 	// Valid indicates whether this enum value is valid in the set of enums
 	Valid bool
+	// CustomComment is the custom comment associated with this enum value
+	CustomComment string
 }
 
 // Source abstracts the origin of input content to be parsed for enum definitions.
