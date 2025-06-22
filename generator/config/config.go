@@ -42,6 +42,10 @@ type EnumTypeConfig struct {
 
 	// SerializationType defines how this enum should be serialized/deserialized
 	SerializationType SerializationType
+
+	// StateMachine enables state machine functionality for this enum type
+	// When true, generates state transition validation methods
+	StateMachine bool
 }
 
 // Configuration holds all the settings that control enum generation behavior.
@@ -95,7 +99,8 @@ func (c *Configuration) GetEnumTypeConfig(typeName string) EnumTypeConfig {
 	// Fallback to global configuration for backward compatibility
 	return EnumTypeConfig{
 		TypeName:          typeName,
-		SerializationType: SerdeName, // Default to name serialization
+		SerializationType: SerdeName,  // Default to name serialization
+		Handlers:          c.Handlers, // Use global handlers configuration
 	}
 }
 

@@ -45,16 +45,31 @@ type Parser interface {
 type GenerationRequest struct {
 	Package        string
 	Imports        []string
-	EnumIota       EnumIota
+	EnumIota       EnumIota   // For backward compatibility - single enum
+	EnumIotas      []EnumIota // For multiple enums from the same file
 	Version        string
 	SourceFilename string
 	OutputFilename string
 	Configuration  config.Configuration
 }
 
+// GetEnumIotas returns all enum iotas, supporting both single and multiple enums
+func (e *GenerationRequest) GetEnumIotas() []EnumIota {
+	if len(e.EnumIotas) > 0 {
+		return e.EnumIotas
+	}
+	// Fallback to single enum for backward compatibility
+	if e.EnumIota.Type != "" {
+		return []EnumIota{e.EnumIota}
+	}
+	return nil
+}
+
 func (e *GenerationRequest) IsValid() bool {
+	// Support both single enum (EnumIota) and multiple enums (EnumIotas)
+	hasValidEnum := (e.EnumIota.Type != "") || (len(e.EnumIotas) > 0)
 	return e.Package != "" &&
-		e.EnumIota.Type != "" &&
+		hasValidEnum &&
 		e.Version != "" &&
 		e.SourceFilename != ""
 }
@@ -217,6 +232,10 @@ type Enum struct {
 	Valid bool
 	// CustomComment is the custom comment associated with this enum value
 	CustomComment string
+	// StateTransitions contains the allowed next states for state machine support
+	StateTransitions []string
+	// IsFinalState indicates if this is a terminal state in the state machine
+	IsFinalState bool
 }
 
 // Source abstracts the origin of input content to be parsed for enum definitions.

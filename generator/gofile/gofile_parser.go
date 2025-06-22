@@ -11,7 +11,9 @@ import (
 	"go/parser"
 	"go/token"
 	"log/slog"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/zarldev/goenums/enum"
 	"github.com/zarldev/goenums/generator/config"
@@ -109,9 +111,6 @@ func (p *Parser) doParse(ctx context.Context) ([]enum.GenerationRequest, error) 
 }
 
 func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, filename string, enumTypeConfigs map[string]config.EnumTypeConfig) ([]enum.GenerationRequest, error) {
-	genr := make([]enum.GenerationRequest, len(enInfo.Enums))
-	enumIotas := enInfo.Enums
-
 	// Initialize EnumTypeConfigs if not already done
 	if p.Configuration.EnumTypeConfigs == nil {
 		p.Configuration.EnumTypeConfigs = make(map[string]config.EnumTypeConfig)
@@ -122,18 +121,27 @@ func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, fi
 		p.Configuration.EnumTypeConfigs[typeName] = cfg
 	}
 
-	for i, enumIota := range enumIotas {
-		lowerPlural := gostrings.Pluralise(gostrings.ToLower(enumIota.Type))
-		genr[i] = enum.GenerationRequest{
-			Package:        packageName,
-			EnumIota:       enumIota,
-			Version:        version.CURRENT,
-			SourceFilename: filename,
-			OutputFilename: gostrings.ToLower(lowerPlural),
-			Configuration:  p.Configuration,
-			Imports:        enInfo.Imports,
-		}
+	// Instead of creating one request per enum, create one request per source file
+	// containing all enums from that file
+	if len(enInfo.Enums) == 0 {
+		return nil, fmt.Errorf("no enums found in file")
 	}
+
+	// Extract the base filename without extension for output filename
+	baseFilename := filepath.Base(filename)
+	baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
+
+	// Create a single GenerationRequest containing all enums from this file
+	genr := []enum.GenerationRequest{{
+		Package:        packageName,
+		EnumIotas:      enInfo.Enums, // Pass all enums instead of single enum
+		Version:        version.CURRENT,
+		SourceFilename: filename,
+		OutputFilename: gostrings.ToLower(baseFilename),
+		Configuration:  p.Configuration,
+		Imports:        enInfo.Imports,
+	}}
+
 	return genr, nil
 }
 
@@ -202,18 +210,36 @@ func (p *Parser) getEnums(node *ast.File, enumIota *enum.EnumIota) []enum.Enum {
 		if !ok {
 			continue
 		}
+
+		// Check if this const block belongs to our target enum type
+		belongsToTargetEnum := p.constBlockBelongsToEnum(t, enumIota)
+		if !belongsToTargetEnum {
+			continue
+		}
+
 		idx := 0
+		blockIotaFound := false
+		blockTypeFound := false
+
 		for _, spec := range t.Specs {
 			vs, ok := spec.(*ast.ValueSpec)
 			if !ok {
 				continue
 			}
-			e := p.getEnum(vs, &idx, enumIota, &iotaFound, &typeFound) // Pass typeFound parameter
+			e := p.getEnum(vs, &idx, enumIota, &blockIotaFound, &blockTypeFound)
 			if e == nil {
 				continue
 			}
 			enums = append(enums, *e)
 			slog.Default().Debug("enum", "enum", e)
+		}
+
+		// Update global flags
+		if blockIotaFound {
+			iotaFound = true
+		}
+		if blockTypeFound {
+			typeFound = true
 		}
 	}
 	// Modified condition: consider valid if either iota or same type constants are found
@@ -228,17 +254,8 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 		slog.Default().Debug("valuespec has no names")
 		return nil
 	}
-	if vs.Values != nil {
-		for _, v := range vs.Values {
-			t, ok := v.(*ast.Ident)
-			if !ok {
-				continue
-			}
-			if t.Name == "iota" {
-				*iotaFound = true
-			}
-		}
-	}
+
+	// Check if this constant has an explicit type
 	if vs.Type != nil {
 		t, ok := vs.Type.(*ast.Ident)
 		if !ok {
@@ -248,6 +265,23 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 			return nil
 		}
 		*typeFound = true
+	}
+
+	// Check for iota usage
+	if vs.Values != nil {
+		for _, v := range vs.Values {
+			if t, ok := v.(*ast.Ident); ok && t.Name == "iota" {
+				*iotaFound = true
+				break
+			}
+			// Check for iota + offset (like iota + 1)
+			if binExpr, ok := v.(*ast.BinaryExpr); ok {
+				if x, ok := binExpr.X.(*ast.Ident); ok && x.Name == "iota" {
+					*iotaFound = true
+					break
+				}
+			}
+		}
 	}
 	name := vs.Names[0].Name
 	if name == "_" {
@@ -312,7 +346,20 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 
 	// Process custom comments from doc comments (above the constant)
 	if vs.Doc != nil && len(vs.Doc.List) > 0 {
-		en.CustomComment = p.parseCustomComment(vs.Doc.List)
+		// Extract the first line as the display name/alias
+		firstLineAlias := p.parseDocFirstLineAsAlias(vs.Doc.List)
+		if firstLineAlias != "" {
+			en.Aliases = []string{firstLineAlias}
+		}
+
+		// Extract all doc comments for the generated struct field
+		en.CustomComment = p.parseAllDocComments(vs.Doc.List)
+
+		// Also check for state machine annotations in doc comments
+		if docStateTransitions, docIsFinal := p.parseDocStateAnnotations(vs.Doc.List); len(docStateTransitions) > 0 || docIsFinal {
+			en.StateTransitions = docStateTransitions
+			en.IsFinalState = docIsFinal
+		}
 	}
 
 	// get comment if exists and set description
@@ -331,6 +378,14 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 			if len(parts) > 1 {
 				en.CustomComment = gostrings.TrimSpace(parts[1])
 			}
+		}
+
+		// Parse state machine annotations
+		if gostrings.Contains(comment, "state:") {
+			cleanedComment, stateTransitions, isFinal := p.parseStateAnnotation(comment)
+			comment = cleanedComment
+			en.StateTransitions = stateTransitions
+			en.IsFinalState = isFinal
 		}
 
 		valid := !gostrings.Contains(comment, "invalid")
@@ -391,6 +446,255 @@ func (p *Parser) parseCustomComment(comments []*ast.Comment) string {
 		return gostrings.TrimSpace(secondComment[len(commentPrefix):])
 	}
 	return ""
+}
+
+// parseDocFirstLineAsAlias extracts the first line of doc comments as the display name/alias
+// This is used when the first line contains the intended display name for the enum value
+func (p *Parser) parseDocFirstLineAsAlias(comments []*ast.Comment) string {
+	if len(comments) == 0 {
+		return ""
+	}
+
+	// Get the first comment line
+	firstComment := comments[0].Text
+	const commentPrefix = "//"
+	if len(firstComment) < len(commentPrefix) || !gostrings.HasPrefix(firstComment, commentPrefix) {
+		return ""
+	}
+
+	content := gostrings.TrimSpace(firstComment[len(commentPrefix):])
+
+	// Skip if this line contains state machine annotations
+	if gostrings.Contains(content, "state:") {
+		return ""
+	}
+
+	// Skip if this line is empty
+	if content == "" {
+		return ""
+	}
+
+	return content
+}
+
+// parseAllDocComments extracts all doc comments and combines them into a single comment string
+// This preserves all comment lines for use in generated struct field comments
+// It intelligently skips the first line if it appears to be a name definition
+func (p *Parser) parseAllDocComments(comments []*ast.Comment) string {
+	if len(comments) == 0 {
+		return ""
+	}
+
+	var commentLines []string
+	const commentPrefix = "//"
+
+	for i, comment := range comments {
+		if len(comment.Text) < len(commentPrefix) || !gostrings.HasPrefix(comment.Text, commentPrefix) {
+			continue
+		}
+
+		content := gostrings.TrimSpace(comment.Text[len(commentPrefix):])
+		if content == "" {
+			continue
+		}
+
+		// Skip the first line if it appears to be a simple name definition
+		if i == 0 && p.isSimpleNameDefinition(content) {
+			continue
+		}
+
+		commentLines = append(commentLines, content)
+	}
+
+	if len(commentLines) == 0 {
+		return ""
+	}
+
+	// Join all comment lines with ", " to create a single comment
+	return gostrings.Join(commentLines, ", ")
+}
+
+// isSimpleNameDefinition determines if a comment line is likely a simple name definition
+// Returns true if the line contains only a simple word/name without additional context
+func (p *Parser) isSimpleNameDefinition(content string) bool {
+	// Trim whitespace
+	content = gostrings.TrimSpace(content)
+
+	// If it contains state machine annotations, it's not a simple name
+	if gostrings.Contains(content, "state:") {
+		return false
+	}
+
+	// If it contains punctuation like commas, colons, parentheses, it's likely not a simple name
+	if strings.ContainsAny(content, ",():;") {
+		return false
+	}
+
+	// If it contains multiple words (more than 2), it's likely not a simple name
+	words := gostrings.Fields(content)
+	if len(words) > 2 {
+		return false
+	}
+
+	// If it's a single word or two simple words, it's likely a name definition
+	return len(words) <= 2
+}
+
+// parseStateAnnotation parses state machine annotations from comments
+// Supports formats like:
+// - "state: -> Next1, Next2" for transitions
+// - "state: [final]" for final states
+// Returns the cleaned comment, transitions slice, and final state flag
+func (p *Parser) parseStateAnnotation(comment string) (string, []string, bool) {
+	var transitions []string
+	isFinal := false
+
+	// Find state: annotation
+	stateIndex := gostrings.Index(comment, "state:")
+	if stateIndex == -1 {
+		return comment, transitions, isFinal
+	}
+
+	// Extract the state annotation part
+	beforeState := comment[:stateIndex]
+	afterStateStart := stateIndex + len("state:")
+
+	// Find the end of the state annotation (next space or end of comment)
+	remaining := ""
+
+	if afterStateStart < len(comment) {
+		afterState := comment[afterStateStart:]
+
+		// Check if it's a final state annotation
+		if gostrings.Contains(afterState, "[final]") {
+			isFinal = true
+			// Remove [final] from the annotation
+			afterState = gostrings.ReplaceAll(afterState, "[final]", "")
+		}
+
+		// Check for transitions (-> syntax)
+		if gostrings.Contains(afterState, "->") {
+			arrowIndex := gostrings.Index(afterState, "->")
+			transitionsPart := afterState[arrowIndex+2:]
+
+			// Split transitions by comma
+			if gostrings.TrimSpace(transitionsPart) != "" {
+				transitionsList := gostrings.Split(transitionsPart, ",")
+				for _, t := range transitionsList {
+					trimmed := gostrings.TrimSpace(t)
+					if trimmed != "" {
+						transitions = append(transitions, trimmed)
+					}
+				}
+			}
+		}
+	}
+
+	// Clean up the comment by removing the state annotation
+	cleanedComment := gostrings.TrimSpace(beforeState + " " + remaining)
+
+	return cleanedComment, transitions, isFinal
+}
+
+// parseDocStateAnnotations parses state machine annotations from doc comments
+// Looks for standalone "state:" lines in doc comments
+func (p *Parser) parseDocStateAnnotations(comments []*ast.Comment) ([]string, bool) {
+	var transitions []string
+	isFinal := false
+
+	for _, comment := range comments {
+		text := comment.Text
+		if !gostrings.HasPrefix(text, "//") {
+			continue
+		}
+
+		content := gostrings.TrimSpace(text[2:])
+
+		// Check if this is a state annotation line
+		if gostrings.HasPrefix(content, "state:") {
+			stateContent := gostrings.TrimSpace(content[6:]) // Remove "state:"
+
+			// Check for final state
+			if gostrings.Contains(stateContent, "[final]") {
+				isFinal = true
+				stateContent = gostrings.ReplaceAll(stateContent, "[final]", "")
+				stateContent = gostrings.TrimSpace(stateContent)
+			}
+
+			// Check for transitions
+			if gostrings.HasPrefix(stateContent, "->") {
+				transitionsPart := gostrings.TrimSpace(stateContent[2:])
+				if transitionsPart != "" {
+					transitionsList := gostrings.Split(transitionsPart, ",")
+					for _, t := range transitionsList {
+						trimmed := gostrings.TrimSpace(t)
+						if trimmed != "" {
+							transitions = append(transitions, trimmed)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return transitions, isFinal
+}
+
+// constBlockBelongsToEnum determines if a const block belongs to the target enum type
+// by checking if any constant in the block has the target type explicitly declared
+func (p *Parser) constBlockBelongsToEnum(genDecl *ast.GenDecl, enumIota *enum.EnumIota) bool {
+	if genDecl.Tok != token.CONST {
+		return false
+	}
+
+	// First, check if any constant in this block has the explicit target type
+	hasTargetType := false
+	hasIota := false
+
+	for _, spec := range genDecl.Specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok {
+			continue
+		}
+
+		// Check if this constant has the target type
+		if vs.Type != nil {
+			if ident, ok := vs.Type.(*ast.Ident); ok && ident.Name == enumIota.Type {
+				hasTargetType = true
+			}
+		}
+
+		// Check if this constant uses iota
+		if vs.Values != nil {
+			for _, v := range vs.Values {
+				if ident, ok := v.(*ast.Ident); ok && ident.Name == "iota" {
+					hasIota = true
+					break
+				}
+				// Check for iota + offset (like iota + 1)
+				if binExpr, ok := v.(*ast.BinaryExpr); ok {
+					if x, ok := binExpr.X.(*ast.Ident); ok && x.Name == "iota" {
+						hasIota = true
+						break
+					}
+				}
+			}
+		}
+
+		if hasTargetType && hasIota {
+			break
+		}
+	}
+
+	// A const block belongs to the target enum if:
+	// 1. It has at least one constant with the explicit target type, OR
+	// 2. It has iota AND the first constant with explicit type matches our target type
+	if hasTargetType {
+		return true
+	}
+
+	// If no explicit target type found, this block doesn't belong to our enum
+	return false
 }
 
 func (p *Parser) getEnumInfo(node *ast.File) enumInfo {
@@ -456,7 +760,7 @@ func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
 	cfg := config.EnumTypeConfig{
 		SerializationType: config.SerdeName, // Default
 		Handlers: config.Handlers{
-			SQL: true, // Default SQL support
+			SQL: false, // Default SQL support
 		},
 	}
 
@@ -470,6 +774,8 @@ func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
 			cfg.Handlers.Text = true
 		case "-binary":
 			cfg.Handlers.Binary = true
+		case "-sql":
+			cfg.Handlers.SQL = true
 		case "-uppercaseFields":
 			cfg.UppercaseFields = true
 		case "-genName":
@@ -478,6 +784,10 @@ func (p *Parser) parseGoEnumsComment(comment string) config.EnumTypeConfig {
 			cfg.SerializationType = config.SerdeName
 		case "-serde/value":
 			cfg.SerializationType = config.SerdeValue
+		case "-statemachine":
+			cfg.StateMachine = true
+		default:
+			panic("unknown enum args: " + part)
 		}
 	}
 

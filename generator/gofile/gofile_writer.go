@@ -100,27 +100,65 @@ func (g *Writer) Write(ctx context.Context,
 }
 
 func (g *Writer) writeEnumGenerationRequest(req enum.GenerationRequest) {
+	// Get all enum iotas (supports both single and multiple enums)
+	enumIotas := req.GetEnumIotas()
+
+	// Write file header only once
 	g.writeGeneratedComments(req)
 	g.writePackageAndImports(req)
-	g.writeWrapperDefinition(req)
-	g.writeRawTypeAlias(req)
-	g.writeContainerDefinition(req)
-	g.writeInvalidEnumDefinition(req)
-	g.writeAllSliceMethod(req)
-	g.writeIsValidFunction(req)
-	g.writeStringMethod(req)
 
-	// Implement Enum interface methods
-	g.writeEnumInterfaceMethods(req)
-	// Directly implement serialization interface methods, calling functions in serde.go
-	g.writeSerializationMethods(req)
-
+	// Write constraints only once if enabled
 	if req.Configuration.Constraints {
 		g.writeConstraints(req)
 	}
-	// Add convenience methods for container type
-	g.writeContainerConvenienceMethods(req)
-	g.writeCompileCheck(req)
+
+	// Generate code for each enum type
+	for i, enumIota := range enumIotas {
+		// Add separator for multiple enums (except for the first one)
+		if len(enumIotas) > 1 {
+			if i > 0 {
+				g.writeEnumSeparator(enumIota.Type)
+			} else {
+				// Add separator before first enum when there are multiple enums
+				g.writeEnumSeparator(enumIota.Type)
+			}
+		}
+
+		// Create a single-enum request for compatibility with existing methods
+		singleEnumReq := enum.GenerationRequest{
+			Package:        req.Package,
+			Imports:        req.Imports,
+			EnumIota:       enumIota,
+			Version:        req.Version,
+			SourceFilename: req.SourceFilename,
+			OutputFilename: req.OutputFilename,
+			Configuration:  req.Configuration,
+		}
+
+		// Generate all the enum-specific code
+		g.writeWrapperDefinition(singleEnumReq)
+		g.writeRawTypeAlias(singleEnumReq)
+		g.writeContainerDefinition(singleEnumReq)
+		g.writeInvalidEnumDefinition(singleEnumReq)
+		g.writeAllSliceMethod(singleEnumReq)
+		g.writeIsValidFunction(singleEnumReq)
+		g.writeStringMethod(singleEnumReq)
+
+		// Implement Enum interface methods
+		g.writeEnumInterfaceMethods(singleEnumReq)
+		// Directly implement serialization interface methods, calling functions in serde.go
+		g.writeSerializationMethods(singleEnumReq)
+
+		// Add convenience methods for container type
+		g.writeContainerConvenienceMethods(singleEnumReq)
+		g.writeCompileCheck(singleEnumReq)
+
+		// Generate state machine methods if enabled
+		enumConfig := singleEnumReq.Configuration.GetEnumTypeConfig(singleEnumReq.EnumIota.Type)
+		if enumConfig.StateMachine {
+			g.writeStateMachineMethods(singleEnumReq)
+		}
+	}
 }
 
 var (
@@ -668,12 +706,25 @@ func (g *Writer) writePackageAndImports(rep enum.GenerationRequest) {
 	// Add enums package import for Enum interface
 	externalImports = append(externalImports, "github.com/zarldev/goenums/enums")
 
-	// Add serialization-related imports
-	enumConfig := rep.Configuration.GetEnumTypeConfig(rep.EnumIota.Type)
-	if enumConfig.Handlers.SQL {
+	// Collect serialization-related imports from all enum types
+	enumIotas := rep.GetEnumIotas()
+	needsSQL := false
+	needsYAML := false
+
+	for _, enumIota := range enumIotas {
+		enumConfig := rep.Configuration.GetEnumTypeConfig(enumIota.Type)
+		if enumConfig.Handlers.SQL {
+			needsSQL = true
+		}
+		if enumConfig.Handlers.YAML {
+			needsYAML = true
+		}
+	}
+
+	if needsSQL {
 		externalImports = append(externalImports, "database/sql/driver")
 	}
-	if enumConfig.Handlers.YAML {
+	if needsYAML {
 		externalImports = append(externalImports, "gopkg.in/yaml.v3")
 	}
 
@@ -760,6 +811,8 @@ func enumDefinitions(rep enum.GenerationRequest) []enumDefinition {
 			Aliases:            aliases,
 			Valid:              e.Valid,
 			CustomComment:      e.CustomComment,
+			StateTransitions:   e.StateTransitions,
+			IsFinalState:       e.IsFinalState,
 		})
 	}
 	return edefs
@@ -932,6 +985,8 @@ type enumDefinition struct {
 	Aliases            []string
 	Valid              bool
 	CustomComment      string
+	StateTransitions   []string
+	IsFinalState       bool
 }
 
 var (
@@ -1106,9 +1161,9 @@ func ({{ .Receiver }} {{ .WrapperName }}) Val() {{ .UnderlyingType }} {
 	enumValueMethodTemplate = template.Must(template.New("enumValueMethod").Parse(enumValueMethodStr))
 
 	enumValuesMethodStr = `
-// Values implements the Enum interface.
+// All implements the Enum interface.
 // It returns an iterator over all enum values.
-func ({{ .Receiver }} {{ .WrapperName }}) Values() iter.Seq[{{ .WrapperName }}] {
+func ({{ .Receiver }} {{ .WrapperName }}) All() iter.Seq[{{ .WrapperName }}] {
 	return func(yield func({{ .WrapperName }}) bool) {
 		for _, v := range {{ .EnumType }}.allSlice() {
 			if !yield(v) {
@@ -1121,9 +1176,9 @@ func ({{ .Receiver }} {{ .WrapperName }}) Values() iter.Seq[{{ .WrapperName }}] 
 	enumValuesMethodTemplate = template.Must(template.New("enumValuesMethod").Parse(enumValuesMethodStr))
 
 	enumFindByNameMethodStr = `
-// FindByName implements the Enum interface.
+// FromName implements the Enum interface.
 // It finds an enum value by name and returns the enum instance and a boolean indicating if found.
-func ({{ .Receiver }} {{ .WrapperName }}) FindByName(name string) ({{ .WrapperName }}, bool) {
+func ({{ .Receiver }} {{ .WrapperName }}) FromName(name string) ({{ .WrapperName }}, bool) {
 	for enum, enumName := range {{ .EnumLower }}NamesMap {
 		if enumName == name {
 			return enum, true
@@ -1136,10 +1191,10 @@ func ({{ .Receiver }} {{ .WrapperName }}) FindByName(name string) ({{ .WrapperNa
 	enumFindByNameMethodTemplate = template.Must(template.New("enumFindByNameMethod").Parse(enumFindByNameMethodStr))
 
 	enumFindByValueMethodStr = `
-// FindByValue implements the Enum interface.
+// FromValue implements the Enum interface.
 // It finds an enum instance by its underlying value and returns the enum instance and a boolean indicating if found.
-func ({{ .Receiver }} {{ .WrapperName }}) FindByValue(value {{ .UnderlyingType }}) ({{ .WrapperName }}, bool) {
-	for v := range {{ .Receiver }}.Values() {
+func ({{ .Receiver }} {{ .WrapperName }}) FromValue(value {{ .UnderlyingType }}) ({{ .WrapperName }}, bool) {
+	for v := range {{ .Receiver }}.All() {
 		if v.Val() == value {
 			return v, true
 		}
@@ -1151,9 +1206,9 @@ func ({{ .Receiver }} {{ .WrapperName }}) FindByValue(value {{ .UnderlyingType }
 	enumFindByValueMethodTemplate = template.Must(template.New("enumFindByValueMethod").Parse(enumFindByValueMethodStr))
 
 	enumFormatMethodStr = `
-// Format implements the Enum interface.
+// SerdeFormat implements the Enum interface.
 // It returns the format used for serialization.
-func ({{ .Receiver }} {{ .WrapperName }}) Format() enums.Format {
+func ({{ .Receiver }} {{ .WrapperName }}) SerdeFormat() enums.Format {
 	{{- if eq .SerializationType "value" }}
 	return enums.FormatValue
 	{{- else }}
@@ -1433,29 +1488,187 @@ func newContainerMethodData(rep enum.GenerationRequest) containerMethodData {
 
 var (
 	containerValuesMethodStr = `
-// Values returns an iterator over all enum values.
+// All returns an iterator over all enum values.
 // This is a convenience method that delegates to the zero value enum instance.
-func ({{ .Receiver }} {{ .ContainerType }}) Values() iter.Seq[{{ .WrapperName }}] {
-	return {{ .WrapperName }}{}.Values()
+func ({{ .Receiver }} {{ .ContainerType }}) All() iter.Seq[{{ .WrapperName }}] {
+	return {{ .WrapperName }}{}.All()
 }
 `
 	containerValuesMethodTemplate = template.Must(template.New("containerValuesMethod").Parse(containerValuesMethodStr))
 
 	containerFindByNameMethodStr = `
-// FindByName finds an enum value by name and returns the enum instance and a boolean indicating if found.
+// FromName finds an enum value by name and returns the enum instance and a boolean indicating if found.
 // This is a convenience method that delegates to the zero value enum instance.
-func ({{ .Receiver }} {{ .ContainerType }}) FindByName(name string) ({{ .WrapperName }}, bool) {
-	return {{ .WrapperName }}{}.FindByName(name)
+func ({{ .Receiver }} {{ .ContainerType }}) FromName(name string) ({{ .WrapperName }}, bool) {
+	return {{ .WrapperName }}{}.FromName(name)
 }
 `
 	containerFindByNameMethodTemplate = template.Must(template.New("containerFindByNameMethod").Parse(containerFindByNameMethodStr))
 
 	containerFindByValueMethodStr = `
-// FindByValue finds an enum instance by its underlying value and returns the enum instance and a boolean indicating if found.
+// FromValue finds an enum instance by its underlying value and returns the enum instance and a boolean indicating if found.
 // This is a convenience method that delegates to the zero value enum instance.
-func ({{ .Receiver }} {{ .ContainerType }}) FindByValue(value {{ .UnderlyingType }}) ({{ .WrapperName }}, bool) {
-	return {{ .WrapperName }}{}.FindByValue(value)
+func ({{ .Receiver }} {{ .ContainerType }}) FromValue(value {{ .UnderlyingType }}) ({{ .WrapperName }}, bool) {
+	return {{ .WrapperName }}{}.FromValue(value)
 }
 `
 	containerFindByValueMethodTemplate = template.Must(template.New("containerFindByValueMethod").Parse(containerFindByValueMethodStr))
 )
+
+// writeEnumSeparator writes a beautiful separator line for enum types
+func (g *Writer) writeEnumSeparator(enumTypeName string) {
+	// Convert enum type name to a more readable format
+	displayName := strings.Camel(enumTypeName)
+
+	// Create a beautiful separator with the enum name
+	separatorLength := 80
+	enumNameWithSpaces := fmt.Sprintf(" %s ", displayName)
+
+	// Calculate padding
+	totalPadding := separatorLength - len(enumNameWithSpaces)
+	leftPadding := totalPadding / 2
+	rightPadding := totalPadding - leftPadding
+
+	// Create padding strings manually since we can't use strings.Repeat
+	leftPad := ""
+	rightPad := ""
+	for i := 0; i < leftPadding; i++ {
+		leftPad += "="
+	}
+	for i := 0; i < rightPadding; i++ {
+		rightPad += "="
+	}
+
+	// Create the separator line
+	separator := fmt.Sprintf("\n// %s%s%s\n",
+		leftPad,
+		enumNameWithSpaces,
+		rightPad)
+
+	// Write the separator
+	fmt.Fprint(g.w, separator)
+}
+
+// writeStateMachineMethods generates state machine related methods
+func (g *Writer) writeStateMachineMethods(rep enum.GenerationRequest) {
+	g.writeCanTransitionToMethod(rep)
+	g.writeValidTransitionsMethod(rep)
+	g.writeIsTerminalStateMethod(rep)
+}
+
+type stateMachineMethodData struct {
+	Receiver    string
+	WrapperName string
+	EnumType    string
+	Enums       []enumDefinition
+}
+
+// FindEnumByName finds the enum identifier by transition name (either alias or enum name)
+func (s stateMachineMethodData) FindEnumByName(transitionName string) string {
+	// First, try to find by exact enum name
+	for _, enum := range s.Enums {
+		if enum.EnumName == transitionName {
+			return enum.EnumNameIdentifier
+		}
+	}
+
+	// Second, try to find by alias (comment name)
+	for _, enum := range s.Enums {
+		for _, alias := range enum.Aliases {
+			if alias == transitionName {
+				return enum.EnumNameIdentifier
+			}
+		}
+	}
+
+	// Third, try to match by removing common prefixes like "Order"
+	if strings.HasPrefix(transitionName, "Order") {
+		withoutPrefix := transitionName[5:] // Remove "Order" prefix
+		for _, enum := range s.Enums {
+			for _, alias := range enum.Aliases {
+				if alias == withoutPrefix {
+					return enum.EnumNameIdentifier
+				}
+			}
+		}
+	}
+
+	// If still not found, return the transition name as-is (fallback)
+	return transitionName
+}
+
+func newStateMachineMethodData(rep enum.GenerationRequest) stateMachineMethodData {
+	enums := enumDefinitions(rep)
+
+	return stateMachineMethodData{
+		Receiver:    receiver(rep.EnumIota.Type),
+		WrapperName: wrapperName(rep.EnumIota.Type),
+		EnumType:    enumType(rep),
+		Enums:       enums,
+	}
+}
+
+var (
+	canTransitionToMethodStr = `
+// CanTransitionTo checks if the current state can transition to the target state.
+// Returns true if the transition is allowed, false otherwise.
+func ({{ .Receiver }} {{ .WrapperName }}) CanTransitionTo(target {{ .WrapperName }}) bool {
+	transitions := {{ .Receiver }}.ValidTransitions()
+	for _, validTarget := range transitions {
+		if validTarget == target {
+			return true
+		}
+	}
+	return false
+}
+`
+	canTransitionToMethodTemplate = template.Must(template.New("canTransitionToMethod").Parse(canTransitionToMethodStr))
+
+	validTransitionsMethodStr = `
+// ValidTransitions returns all valid target states that this state can transition to.
+// Returns an empty slice if this is a terminal state or has no defined transitions.
+func ({{ .Receiver }} {{ .WrapperName }}) ValidTransitions() []{{ .WrapperName }} {
+	{{- range .Enums }}
+	{{- if .StateTransitions }}
+	if {{ $.Receiver }} == {{ $.EnumType }}.{{ .EnumNameIdentifier }} {
+		return []{{ $.WrapperName }}{
+			{{- range .StateTransitions }}
+			{{ $.EnumType }}.{{ $.FindEnumByName . }},
+			{{- end }}
+		}
+	}
+	{{- end }}
+	{{- end }}
+	return []{{ .WrapperName }}{}
+}
+`
+	validTransitionsMethodTemplate = template.Must(template.New("validTransitionsMethod").Parse(validTransitionsMethodStr))
+
+	isTerminalStateMethodStr = `
+// IsTerminalState returns true if this state is a terminal (final) state.
+// Terminal states cannot transition to any other state.
+func ({{ .Receiver }} {{ .WrapperName }}) IsTerminalState() bool {
+	{{- range .Enums }}
+	{{- if .IsFinalState }}
+	if {{ $.Receiver }} == {{ $.EnumType }}.{{ .EnumNameIdentifier }} {
+		return true
+	}
+	{{- end }}
+	{{- end }}
+	return false
+}
+`
+	isTerminalStateMethodTemplate = template.Must(template.New("isTerminalStateMethod").Parse(isTerminalStateMethodStr))
+)
+
+func (g *Writer) writeCanTransitionToMethod(rep enum.GenerationRequest) {
+	g.writeTemplate(canTransitionToMethodTemplate, newStateMachineMethodData(rep))
+}
+
+func (g *Writer) writeValidTransitionsMethod(rep enum.GenerationRequest) {
+	g.writeTemplate(validTransitionsMethodTemplate, newStateMachineMethodData(rep))
+}
+
+func (g *Writer) writeIsTerminalStateMethod(rep enum.GenerationRequest) {
+	g.writeTemplate(isTerminalStateMethodTemplate, newStateMachineMethodData(rep))
+}

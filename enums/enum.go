@@ -14,11 +14,11 @@ const (
 // Enum interface definition
 type Enum[R comparable, Self comparable] interface {
 	Val() R
-	Values() iter.Seq[Self]
+	All() iter.Seq[Self]
 	IsValid() bool
-	FindByName(name string) (Self, bool) // Return complete enum instance
-	FindByValue(value R) (Self, bool)    // Return complete enum instance
-	Format() Format
+	FromName(name string) (Self, bool) // Return complete enum instance
+	FromValue(value R) (Self, bool)    // Return complete enum instance
+	SerdeFormat() Format
 	Name() string // Enum name, required value
 	String() string
 }

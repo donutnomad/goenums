@@ -365,11 +365,11 @@ func configuration(ctx context.Context) (config.Configuration, error) {
 		Filenames:    filenames,
 		Constraints:  f.constraints,
 		Handlers: config.Handlers{
-			JSON:   true,
-			Text:   true,
-			SQL:    true,
-			YAML:   true,
-			Binary: true,
+			JSON:   false,
+			Text:   false,
+			SQL:    false,
+			YAML:   false,
+			Binary: false,
 		},
 		EnumTypeConfigs: make(map[string]config.EnumTypeConfig),
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 func MarshalJSON[R comparable, T comparable, E Enum[R, T]](e E, b any) ([]byte, error) {
-	if e.Format() == FormatName {
+	if e.SerdeFormat() == FormatName {
 		return json.Marshal(e.Name())
 	}
 	bs, err := anyToString(b)
@@ -18,7 +18,7 @@ func MarshalJSON[R comparable, T comparable, E Enum[R, T]](e E, b any) ([]byte, 
 }
 
 func UnmarshalJSON[R comparable, T comparable, E Enum[R, T]](e E, bs []byte) (*E, error) {
-	if e.Format() == FormatName {
+	if e.SerdeFormat() == FormatName {
 		var name string
 		if err := json.Unmarshal(bs, &name); err != nil {
 			return nil, err
@@ -33,7 +33,7 @@ func UnmarshalJSON[R comparable, T comparable, E Enum[R, T]](e E, bs []byte) (*E
 }
 
 func SQLValue[R comparable, T comparable, E Enum[R, T]](e E) (driver.Value, error) {
-	if e.Format() == FormatName {
+	if e.SerdeFormat() == FormatName {
 		return e.Name(), nil
 	}
 	val := any(e.Val())
@@ -57,7 +57,7 @@ func SQLValue[R comparable, T comparable, E Enum[R, T]](e E) (driver.Value, erro
 }
 
 func SQLScan[R comparable, T comparable, E Enum[R, T]](e E, src any) (*E, error) {
-	if e.Format() == FormatName {
+	if e.SerdeFormat() == FormatName {
 		var name string
 		err := NewScanner[string](&name).Scan(src)
 		if err != nil {
@@ -92,7 +92,7 @@ func UnmarshalBinary[R comparable, T comparable, E Enum[R, T]](e E, bs []byte) (
 
 func findNameOrValue[R comparable, T comparable, E Enum[R, T], V any](e E, value V, isName bool, src any) (*E, error) {
 	if isName {
-		ret, ok := e.FindByName(any(value).(string))
+		ret, ok := e.FromName(any(value).(string))
 		if ok {
 			if en, ok := any(ret).(E); ok {
 				return &en, nil
@@ -100,7 +100,7 @@ func findNameOrValue[R comparable, T comparable, E Enum[R, T], V any](e E, value
 		}
 		return nil, fmt.Errorf("unknown constants %v", src)
 	}
-	ret, ok := e.FindByValue(any(value).(R))
+	ret, ok := e.FromValue(any(value).(R))
 	if ok {
 		if en, ok := any(ret).(E); ok {
 			return &en, nil
@@ -110,7 +110,7 @@ func findNameOrValue[R comparable, T comparable, E Enum[R, T], V any](e E, value
 }
 
 //func MarshalYAML[R comparable, T comparable, E Enum[R, T]](e E, b any) (interface{}, error) {
-//	if e.Format() == FormatName {
+//	if e.SerdeFormat() == FormatName {
 //		return e.Name(), nil
 //	}
 //	str, err := anyToString(b)
