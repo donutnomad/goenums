@@ -3,7 +3,7 @@ package enum_test
 import (
 	"testing"
 
-	"github.com/zarldev/goenums/enum"
+	"github.com/donutnomad/goenums/enum"
 )
 
 func BenchmarkParseValue_Int(b *testing.B) {

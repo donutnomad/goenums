@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/zarldev/goenums/examples/solarsystem"
+	"github.com/donutnomad/goenums/examples/solarsystem"
 )
 
 // Example_basicEnum demonstrates the most basic usage of goenums.

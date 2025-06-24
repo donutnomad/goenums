@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zarldev/goenums/logging"
+	"github.com/donutnomad/goenums/logging"
 )
 
 func TestLoggingOutput(t *testing.T) {

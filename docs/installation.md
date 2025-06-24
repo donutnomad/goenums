@@ -10,7 +10,7 @@ Getting started with goenums is simple. Since it's a code generation tool that r
 The recommended way to install goenums is via Go's built-in package manager:
 
 ```bash
-go install github.com/zarldev/goenums@latest
+go install github.com/donutnomad/goenums@latest
 ```
 
 This will download, compile, and install the latest version of goenums, making it available in your system's Go binary directory (`$GOPATH/bin` or `$GOBIN`).

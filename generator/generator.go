@@ -21,9 +21,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/generator/config"
-	"github.com/zarldev/goenums/generator/gofile"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/generator/config"
+	"github.com/donutnomad/goenums/generator/gofile"
 )
 
 // Generator is the main orchestrator for the enum generation workflow.

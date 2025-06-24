@@ -6,7 +6,7 @@
 // via CLI commands. The BUILD and COMMIT constants are designed to be
 // populated automatically during the build process using ldflags:
 //
-//	go build -ldflags="-X github.com/zarldev/goenums/internal/version.BUILD=20230405 -X github.com/zarldev/goenums/internal/version.COMMIT=abc123"
+//	go build -ldflags="-X github.com/donutnomad/goenums/internal/version.BUILD=20230405 -X github.com/donutnomad/goenums/internal/version.COMMIT=abc123"
 package version
 
 // CURRENT represents the semantic version of the goenums tool.
@@ -17,12 +17,12 @@ var CURRENT string = "v0.4.0"
 // This field is designed to be populated at build time using the
 // -ldflags option:
 //
-//	-X github.com/zarldev/goenums/internal/version.BUILD=$(date +%Y%m%d-%H:%M:%S)
+//	-X github.com/donutnomad/goenums/internal/version.BUILD=$(date +%Y%m%d-%H:%M:%S)
 var BUILD string
 
 // COMMIT contains the git commit hash from which the binary was built.
 // This field is designed to be populated at build time using the
 // -ldflags option:
 //
-//	-X github.com/zarldev/goenums/internal/version.COMMIT=$(git rev-parse --short HEAD)
+//	-X github.com/donutnomad/goenums/internal/version.COMMIT=$(git rev-parse --short HEAD)
 var COMMIT string

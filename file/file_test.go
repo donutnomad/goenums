@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zarldev/goenums/file"
+	"github.com/donutnomad/goenums/file"
 )
 
 func TestWriteToFileAndFormatFS(t *testing.T) {

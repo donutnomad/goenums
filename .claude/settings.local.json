@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(../../goenums -f -c status.go)"
+    ],
+    "deny": []
+  }
+}

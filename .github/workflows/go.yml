@@ -73,13 +73,13 @@ jobs:
       run: go test -v -coverprofile=coverage.out ./... 
     - name: filter coverage profile to exclude examples
       run: |
-        grep -v "github.com/zarldev/goenums/example" coverage.out > coverage_filtered.out || true
+        grep -v "github.com/donutnomad/goenums/example" coverage.out > coverage_filtered.out || true
         mv coverage_filtered.out coverage.out
     - name: coverage
       uses: vladopajic/go-test-coverage@v2
       with:
         profile: coverage.out
-        local-prefix: github.com/zarldev/goenums
+        local-prefix: github.com/donutnomad/goenums
         config-file: ./.testcoverage.yml
     - name: function coverage
       run: go tool cover -func coverage.out

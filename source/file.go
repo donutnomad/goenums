@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zarldev/goenums/file"
+	"github.com/donutnomad/goenums/file"
 )
 
 var (

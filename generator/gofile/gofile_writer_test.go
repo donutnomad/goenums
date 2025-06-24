@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/zarldev/goenums/file"
-	"github.com/zarldev/goenums/generator/gofile"
-	"github.com/zarldev/goenums/internal/testdata"
+	"github.com/donutnomad/goenums/file"
+	"github.com/donutnomad/goenums/generator/gofile"
+	"github.com/donutnomad/goenums/internal/testdata"
 )
 
 func TestWriter_Write(t *testing.T) {

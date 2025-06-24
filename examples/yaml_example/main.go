@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/zarldev/goenums/examples/validation"
+	"github.com/donutnomad/goenums/examples/validation"
 )
 
 func main() {

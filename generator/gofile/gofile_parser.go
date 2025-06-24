@@ -15,11 +15,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/generator/config"
-	"github.com/zarldev/goenums/internal/version"
-	"github.com/zarldev/goenums/source"
-	gostrings "github.com/zarldev/goenums/strings"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/generator/config"
+	"github.com/donutnomad/goenums/internal/version"
+	"github.com/donutnomad/goenums/source"
+	gostrings "github.com/donutnomad/goenums/strings"
 )
 
 // Compile-time check that Parser implements enum.Parser

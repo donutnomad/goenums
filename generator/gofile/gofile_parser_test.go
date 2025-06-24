@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/generator/gofile"
-	"github.com/zarldev/goenums/internal/testdata"
-	"github.com/zarldev/goenums/source"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/generator/gofile"
+	"github.com/donutnomad/goenums/internal/testdata"
+	"github.com/donutnomad/goenums/source"
 )
 
 func TestGoFileParser_Parse(t *testing.T) {

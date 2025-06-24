@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/zarldev/goenums/file"
+	"github.com/donutnomad/goenums/file"
 )
 
 func TestMemFS_WriteFile(t *testing.T) {

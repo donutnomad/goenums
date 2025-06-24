@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarldev/goenums/file"
-	"github.com/zarldev/goenums/source"
+	"github.com/donutnomad/goenums/file"
+	"github.com/donutnomad/goenums/source"
 )
 
 type errorReader struct{}

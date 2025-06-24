@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/zarldev/goenums/file"
+	"github.com/donutnomad/goenums/file"
 )
 
 func TestOSReadWriteFileFS_WriteAndRead(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing/fstest"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/source"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/source"
 )
 
 // Example_fileSource demonstrates how to create and use a file-based source

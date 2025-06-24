@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zarldev/goenums/generator/config"
+	"github.com/donutnomad/goenums/generator/config"
 )
 
 // Parser defines the contract for components that convert source content into

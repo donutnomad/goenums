@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarldev/goenums/strings"
+	"github.com/donutnomad/goenums/strings"
 )
 
 func TestSingularise(t *testing.T) {

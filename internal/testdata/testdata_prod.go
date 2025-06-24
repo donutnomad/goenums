@@ -7,9 +7,9 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/file"
-	"github.com/zarldev/goenums/generator/config"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/file"
+	"github.com/donutnomad/goenums/generator/config"
 )
 
 // In production builds, this is a stub implementation that doesn't embed any files

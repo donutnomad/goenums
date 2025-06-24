@@ -8,11 +8,11 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/file"
-	"github.com/zarldev/goenums/generator/config"
-	"github.com/zarldev/goenums/generator/gofile"
-	"github.com/zarldev/goenums/source"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/file"
+	"github.com/donutnomad/goenums/generator/config"
+	"github.com/donutnomad/goenums/generator/gofile"
+	"github.com/donutnomad/goenums/source"
 )
 
 //go:embed *

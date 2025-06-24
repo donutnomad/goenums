@@ -5,8 +5,8 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_DIRTY := $(shell if [ -n "$$(git status --porcelain)" ]; then echo "-dirty"; fi)
 
 # Properly formatted LDFLAGS
-LDFLAGS := -ldflags "-X github.com/zarldev/goenums/internal/version.CURRENT='$(VERSION)' -X github.com/zarldev/goenums/internal/version.BUILD='$(BUILD_TIME)' -X github.com/zarldev/goenums/internal/version.COMMIT='$(GIT_COMMIT)$(GIT_DIRTY)'"
-PRODLDFLAGS := -ldflags "-s -w -X github.com/zarldev/goenums/internal/version.CURRENT='$(VERSION)' -X github.com/zarldev/goenums/internal/version.BUILD='$(BUILD_TIME)' -X github.com/zarldev/goenums/internal/version.COMMIT='$(GIT_COMMIT)$(GIT_DIRTY)'"
+LDFLAGS := -ldflags "-X github.com/donutnomad/goenums/internal/version.CURRENT='$(VERSION)' -X github.com/donutnomad/goenums/internal/version.BUILD='$(BUILD_TIME)' -X github.com/donutnomad/goenums/internal/version.COMMIT='$(GIT_COMMIT)$(GIT_DIRTY)'"
+PRODLDFLAGS := -ldflags "-s -w -X github.com/donutnomad/goenums/internal/version.CURRENT='$(VERSION)' -X github.com/donutnomad/goenums/internal/version.BUILD='$(BUILD_TIME)' -X github.com/donutnomad/goenums/internal/version.COMMIT='$(GIT_COMMIT)$(GIT_DIRTY)'"
 
 # Fuzz test names
 FUZZ_TESTS := FuzzParseValue_String FuzzParseValue_Int FuzzParseValue_Bool FuzzParseValue_Float64 FuzzParseValue_Duration FuzzParseEnumAliases FuzzParseEnumFields FuzzExtractFields
@@ -163,7 +163,7 @@ test-coverage:
 	@echo "📊 Running tests with coverage..."
 	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 	@echo "🔍 Filtering coverage profile to exclude examples..."
-	@grep -v "github.com/zarldev/goenums/example" cover.out > cover_filtered.out 2>/dev/null || cp cover.out cover_filtered.out
+	@grep -v "github.com/donutnomad/goenums/example" cover.out > cover_filtered.out 2>/dev/null || cp cover.out cover_filtered.out
 	@mv cover_filtered.out cover.out
 	go-test-coverage --config=./.testcoverage.yml
 	@echo "📈 Generating HTML coverage report..."

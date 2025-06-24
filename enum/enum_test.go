@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarldev/goenums/enum"
-	"github.com/zarldev/goenums/generator/config"
+	"github.com/donutnomad/goenums/enum"
+	"github.com/donutnomad/goenums/generator/config"
 )
 
 func TestParseValue(t *testing.T) {

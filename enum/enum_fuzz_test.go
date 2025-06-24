@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarldev/goenums/enum"
+	"github.com/donutnomad/goenums/enum"
 )
 
 func FuzzParseValue_String(f *testing.F) {

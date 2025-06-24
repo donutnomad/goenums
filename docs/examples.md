@@ -55,4 +55,4 @@ solarsystem.ExhaustivePlanets(func(p solarsystem.Planet) {
     }
 })
 ```
-For more examples, see the [testdata](https://github.com/zarldev/goenums/tree/main/internal/testdata) directory.
+For more examples, see the [testdata](https://github.com/donutnomad/goenums/tree/main/internal/testdata) directory.
