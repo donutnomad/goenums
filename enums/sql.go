@@ -2,6 +2,7 @@ package enums
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"time"
@@ -71,7 +72,12 @@ func (s *GenericScanner[T]) scanInt(src any) error {
 	case uint, uint8, uint16, uint32, uint64:
 		// Use reflection to handle unsigned integers
 		rv := reflect.ValueOf(v)
-		i = int64(rv.Uint())
+		uintVal := rv.Uint()
+		// Check for overflow when converting uint64 to int64
+		if uintVal > math.MaxInt64 { // math.MaxInt64
+			return fmt.Errorf("unsigned integer value %d overflows int64", uintVal)
+		}
+		i = int64(uintVal)
 	case float64:
 		i = int64(v)
 	case float32:
@@ -132,10 +138,14 @@ func (s *GenericScanner[T]) scanFloat(src any) error {
 		f = v
 	case float32:
 		f = float64(v)
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		// Use reflection to handle all integer types
+	case int, int8, int16, int32, int64:
+		// Handle signed integers
 		rv := reflect.ValueOf(v)
 		f = float64(rv.Int())
+	case uint, uint8, uint16, uint32, uint64:
+		// Handle unsigned integers
+		rv := reflect.ValueOf(v)
+		f = float64(rv.Uint())
 	case []byte:
 		f, err = strconv.ParseFloat(string(v), 64)
 	case string:
@@ -168,10 +178,14 @@ func (s *GenericScanner[T]) scanBool(src any) error {
 	switch v := src.(type) {
 	case bool:
 		b = v
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		// All non-zero integers converted to true
+	case int, int8, int16, int32, int64:
+		// Handle signed integers - non-zero converted to true
 		rv := reflect.ValueOf(v)
 		b = rv.Int() != 0
+	case uint, uint8, uint16, uint32, uint64:
+		// Handle unsigned integers - non-zero converted to true
+		rv := reflect.ValueOf(v)
+		b = rv.Uint() != 0
 	case float32, float64:
 		// All non-zero floating point numbers converted to true
 		rv := reflect.ValueOf(v)

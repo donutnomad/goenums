@@ -1,6 +1,7 @@
 package enums
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -568,6 +569,19 @@ func TestGenericScanner_EdgeCases(t *testing.T) {
 		}
 		if result != largeInt {
 			t.Errorf("expected %v, got %v", largeInt, result)
+		}
+	})
+
+	t.Run("uint64 overflow to int64", func(t *testing.T) {
+		var result int64
+		scanner := NewScanner(&result)
+		largeUint := uint64(18446744073709551615) // max uint64, should overflow int64
+		err := scanner.Scan(largeUint)
+		if err == nil {
+			t.Errorf("expected overflow error for uint64 to int64")
+		}
+		if err != nil && !strings.Contains(err.Error(), "overflows int64") {
+			t.Errorf("expected overflow error message, got: %v", err.Error())
 		}
 	})
 }

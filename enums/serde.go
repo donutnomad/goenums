@@ -75,19 +75,49 @@ func SQLScan[R comparable, T comparable, E Enum[R, T]](e E, src any) (*E, error)
 }
 
 func MarshalText[R comparable, T comparable, E Enum[R, T]](e E, b any) ([]byte, error) {
-	return MarshalJSON(e, b)
+	if e.SerdeFormat() == FormatName {
+		return []byte(e.Name()), nil
+	}
+	bs, err := anyToString(b)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(bs), nil
 }
 
 func UnmarshalText[R comparable, T comparable, E Enum[R, T]](e E, bs []byte) (*E, error) {
-	return UnmarshalJSON(e, bs)
+	str := string(bs)
+	if e.SerdeFormat() == FormatName {
+		return findNameOrValue(e, str, true, str)
+	}
+
+	var rawValue R
+	err := parseStringValue(str, &rawValue)
+	if err != nil {
+		return nil, err
+	}
+	return findNameOrValue(e, rawValue, false, string(bs))
 }
 
 func MarshalBinary[R comparable, T comparable, E Enum[R, T]](e E, b any) ([]byte, error) {
-	return MarshalJSON(e, b)
+	if e.SerdeFormat() == FormatName {
+		return []byte(e.Name()), nil
+	}
+	return anyToBinary(b)
 }
 
 func UnmarshalBinary[R comparable, T comparable, E Enum[R, T]](e E, bs []byte) (*E, error) {
-	return UnmarshalJSON(e, bs)
+	if e.SerdeFormat() == FormatName {
+		name := string(bs)
+		return findNameOrValue(e, name, true, string(bs))
+	}
+
+	var rawValue R
+	err := parseBinaryValue(bs, &rawValue)
+	if err != nil {
+		return nil, err
+	}
+	return findNameOrValue(e, rawValue, false, string(bs))
 }
 
 func findNameOrValue[R comparable, T comparable, E Enum[R, T], V any](e E, value V, isName bool, src any) (*E, error) {

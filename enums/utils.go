@@ -1,7 +1,10 @@
 package enums
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -70,6 +73,8 @@ func anyToString(value any) (string, error) {
 		str = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case float64:
 		str = strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		str = strconv.FormatBool(v)
 	case string:
 		str = v
 	case []byte:
@@ -159,6 +164,12 @@ func parseStringValue[T any](str string, value *T) error {
 			return err
 		}
 		*v = parsed
+	case *bool:
+		parsed, err := strconv.ParseBool(str)
+		if err != nil {
+			return err
+		}
+		*v = parsed
 	case *string:
 		*v = str
 	case *[]byte:
@@ -199,6 +210,161 @@ func parseFloat64Value[T any](num float64, value *T) error {
 		*v = num
 	default:
 		return json.Unmarshal([]byte(strconv.FormatFloat(num, 'f', -1, 64)), value)
+	}
+	return nil
+}
+
+// anyToBinary 将任意类型转换为二进制格式
+// 使用大端字节序（network byte order）作为标准
+func anyToBinary(value any) ([]byte, error) {
+	switch v := value.(type) {
+	case int8:
+		return []byte{byte(v)}, nil
+	case int16:
+		buf := make([]byte, 2)
+		binary.BigEndian.PutUint16(buf, uint16(v))
+		return buf, nil
+	case int32:
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(v))
+		return buf, nil
+	case int64:
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(v))
+		return buf, nil
+	case int:
+		// int 在不同平台可能是32位或64位，统一用64位存储
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(v))
+		return buf, nil
+	case uint8:
+		return []byte{v}, nil
+	case uint16:
+		buf := make([]byte, 2)
+		binary.BigEndian.PutUint16(buf, v)
+		return buf, nil
+	case uint32:
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, v)
+		return buf, nil
+	case uint64:
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, v)
+		return buf, nil
+	case uint:
+		// uint 统一用64位存储
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(v))
+		return buf, nil
+	case float32:
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, math.Float32bits(v))
+		return buf, nil
+	case float64:
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, math.Float64bits(v))
+		return buf, nil
+	case bool:
+		if v {
+			return []byte{1}, nil
+		}
+		return []byte{0}, nil
+	case string:
+		return []byte(v), nil
+	case []byte:
+		// 直接返回副本，避免修改原始数据
+		result := make([]byte, len(v))
+		copy(result, v)
+		return result, nil
+	default:
+		// 对于复杂类型，使用JSON序列化
+		return json.Marshal(value)
+	}
+}
+
+// parseBinaryValue 从二进制数据解析为指定类型
+func parseBinaryValue[T any](data []byte, value *T) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty binary data")
+	}
+
+	switch v := any(value).(type) {
+	case *int8:
+		if len(data) < 1 {
+			return fmt.Errorf("insufficient data for int8")
+		}
+		*v = int8(data[0])
+	case *int16:
+		if len(data) < 2 {
+			return fmt.Errorf("insufficient data for int16")
+		}
+		*v = int16(binary.BigEndian.Uint16(data))
+	case *int32:
+		if len(data) < 4 {
+			return fmt.Errorf("insufficient data for int32")
+		}
+		*v = int32(binary.BigEndian.Uint32(data))
+	case *int64:
+		if len(data) < 8 {
+			return fmt.Errorf("insufficient data for int64")
+		}
+		*v = int64(binary.BigEndian.Uint64(data))
+	case *int:
+		if len(data) < 8 {
+			return fmt.Errorf("insufficient data for int")
+		}
+		*v = int(binary.BigEndian.Uint64(data))
+	case *uint8:
+		if len(data) < 1 {
+			return fmt.Errorf("insufficient data for uint8")
+		}
+		*v = data[0]
+	case *uint16:
+		if len(data) < 2 {
+			return fmt.Errorf("insufficient data for uint16")
+		}
+		*v = binary.BigEndian.Uint16(data)
+	case *uint32:
+		if len(data) < 4 {
+			return fmt.Errorf("insufficient data for uint32")
+		}
+		*v = binary.BigEndian.Uint32(data)
+	case *uint64:
+		if len(data) < 8 {
+			return fmt.Errorf("insufficient data for uint64")
+		}
+		*v = binary.BigEndian.Uint64(data)
+	case *uint:
+		if len(data) < 8 {
+			return fmt.Errorf("insufficient data for uint")
+		}
+		*v = uint(binary.BigEndian.Uint64(data))
+	case *float32:
+		if len(data) < 4 {
+			return fmt.Errorf("insufficient data for float32")
+		}
+		bits := binary.BigEndian.Uint32(data)
+		*v = math.Float32frombits(bits)
+	case *float64:
+		if len(data) < 8 {
+			return fmt.Errorf("insufficient data for float64")
+		}
+		bits := binary.BigEndian.Uint64(data)
+		*v = math.Float64frombits(bits)
+	case *bool:
+		if len(data) < 1 {
+			return fmt.Errorf("insufficient data for bool")
+		}
+		*v = data[0] != 0
+	case *string:
+		*v = string(data)
+	case *[]byte:
+		// 创建副本，避免共享底层数组
+		*v = make([]byte, len(data))
+		copy(*v, data)
+	default:
+		// 对于复杂类型，尝试JSON反序列化
+		return json.Unmarshal(data, value)
 	}
 	return nil
 }
