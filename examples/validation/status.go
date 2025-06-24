@@ -1,9 +1,12 @@
 package validation
 
-type status int
+//go:generate ../../goenums status.go
+
+// goenums: -sql -json -serde/value -genName
+type tokenRequestStatus int
 
 const (
-	Step1Initialized tokenRequestStatus = 1000 // Run2; 1000, Step1 process started (PENDING)
+	Step1Initialized tokenRequestStatus = 1000 // ;1000, Step1 process started (PENDING)
 	Step1Canceled    tokenRequestStatus = 9010 // ;9010, User manually canceled, process ended (CANCELED)
 	Step1MarkAllowed tokenRequestStatus = 1001 // ;1001, Marked as approved (PENDING)
 	Step1MarkDenied  tokenRequestStatus = 1002 // ;1002, Marked as denied (PENDING)
@@ -21,19 +24,55 @@ const (
 	Step4Success tokenRequestStatus = 4000 // ;4000
 )
 
-// goenums: -json -text -binary -serde/string
+// goenums: -json -text -binary -yaml -serde/name
 type stringStatus int
 
 const (
-	// invalid UNKNOWN
-	// Customer11111
-	unknown status = iota
-	// FAILED
-	// Hello
-	failed
-	passed    // PASSED; I am a single line commentI am a single line commentI am a single line commentI am a single line commentI am a single line commentI am a single line commentI am a single line comment
-	skipped   // SKIPPED
-	scheduled // SCHEDULED
-	running   // RUNNING
-	booked    // BOOKED
+	none           stringStatus = 0 // invalid
+	StringActive   stringStatus = 1 // Active
+	StringInactive stringStatus = 2 // Inactive
+)
+
+// goenums: -json -text -binary -serde/name
+type bytesStatus int
+
+const (
+	BytesActive   bytesStatus = 1 // Active
+	BytesInactive bytesStatus = 2 // Inactive
+)
+
+// goenums: -json -text -binary -serde/value
+type primitiveStatus float32
+
+const (
+	PrimitiveActive   primitiveStatus = 1.5 // Active
+	PrimitiveInactive primitiveStatus = 2.5 // Inactive
+)
+
+// goenums: -statemachine
+type orderStatus int
+
+const (
+	// Pending
+	// state: -> xProcessing, orderCancelled
+	// 我是注释哦哦
+	orderPending orderStatus = iota
+	// Processing
+	// state: -> orderShipped, orderFailed
+	// 我是注释哦哦2
+	xProcessing
+	// Shipped
+	// state: -> orderDelivered
+	// 我是注释哦哦3
+	orderShipped
+	// Delivered
+	// state: [final]
+	// 我是注释哦哦4
+	orderDelivered
+	// Cancelled
+	// state: [final]
+	orderCancelled
+	// Failed
+	// state: -> orderPending, orderCancelled
+	orderFailed
 )
