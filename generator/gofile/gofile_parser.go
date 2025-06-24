@@ -289,7 +289,8 @@ func (p *Parser) getEnum(vs *ast.ValueSpec, idx *int, enumIota *enum.EnumIota, i
 		return nil
 	}
 	en := enum.Enum{
-		Name: vs.Names[0].Name,
+		Name:  vs.Names[0].Name,
+		Valid: true, // Default to valid unless marked as invalid in comment
 	}
 
 	// Handle direct numeric assignment
