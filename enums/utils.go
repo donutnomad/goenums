@@ -5,88 +5,54 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 )
 
-func toInt64(value any) (int64, bool) {
-	switch v := value.(type) {
-	case int8:
-		return int64(v), true
-	case int16:
-		return int64(v), true
-	case int32:
-		return int64(v), true
-	case int64:
-		return v, true
-	case int:
-		return int64(v), true
-	case uint8:
-		return int64(v), true
-	case uint16:
-		return int64(v), true
-	case uint32:
-		return int64(v), true
-	case uint64:
-		return int64(v), true
-	case uint:
-		return int64(v), true
-	default:
-		return 0, false
-	}
-}
-
-func toFloat64(value any) (float64, bool) {
-	switch v := value.(type) {
-	case float32:
-		return float64(v), true
-	case float64:
-		return v, true
-	default:
-		return 0, false
-	}
-}
-
 func anyToString(value any) (string, error) {
-	var str string
-	switch v := value.(type) {
-	case int8:
-		str = strconv.FormatInt(int64(v), 10)
-	case int16:
-		str = strconv.FormatInt(int64(v), 10)
-	case int32:
-		str = strconv.FormatInt(int64(v), 10)
-	case int64:
-		str = strconv.FormatInt(v, 10)
-	case int:
-		str = strconv.FormatInt(int64(v), 10)
-	case uint8:
-		str = strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		str = strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		str = strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		str = strconv.FormatUint(v, 10)
-	case uint:
-		str = strconv.FormatUint(uint64(v), 10)
-	case float32:
-		str = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		str = strconv.FormatFloat(v, 'f', -1, 64)
-	case bool:
-		str = strconv.FormatBool(v)
-	case string:
-		str = v
-	case []byte:
-		str = string(v)
+	if value == nil {
+		return "null", nil
+	}
+
+	// 使用反射获取值的类型信息
+	v := reflect.ValueOf(value)
+
+	// 如果是指针，获取其元素
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return "null", nil
+		}
+		v = v.Elem()
+	}
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(v.Int(), 10), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(v.Uint(), 10), nil
+	case reflect.Float32:
+		// 对于 float32，使用 32 位精度格式化，避免 float64 转换带来的精度问题
+		f32 := float32(v.Float())
+		return strconv.FormatFloat(float64(f32), 'g', -1, 32), nil
+	case reflect.Float64:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 64), nil
+	case reflect.Bool:
+		return strconv.FormatBool(v.Bool()), nil
+	case reflect.String:
+		return v.String(), nil
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 { // []byte
+			return string(v.Bytes()), nil
+		}
+		fallthrough
 	default:
 		marshal, err := json.Marshal(value)
 		if err != nil {
 			return "", err
 		}
-		str = string(marshal)
+		return string(marshal), nil
 	}
-	return str, nil
 }
 
 // Helper functions for parsing values
@@ -182,100 +148,76 @@ func parseStringValue[T any](str string, value *T) error {
 	return nil
 }
 
-func parseFloat64Value[T any](num float64, value *T) error {
-	switch v := any(value).(type) {
-	case *int:
-		*v = int(num)
-	case *int8:
-		*v = int8(num)
-	case *int16:
-		*v = int16(num)
-	case *int32:
-		*v = int32(num)
-	case *int64:
-		*v = int64(num)
-	case *uint:
-		*v = uint(num)
-	case *uint8:
-		*v = uint8(num)
-	case *uint16:
-		*v = uint16(num)
-	case *uint32:
-		*v = uint32(num)
-	case *uint64:
-		*v = uint64(num)
-	case *float32:
-		*v = float32(num)
-	case *float64:
-		*v = num
-	default:
-		return json.Unmarshal([]byte(strconv.FormatFloat(num, 'f', -1, 64)), value)
-	}
-	return nil
-}
-
 // anyToBinary 将任意类型转换为二进制格式
 // 使用大端字节序（network byte order）作为标准
 func anyToBinary(value any) ([]byte, error) {
-	switch v := value.(type) {
-	case int8:
-		return []byte{byte(v)}, nil
-	case int16:
+	if value == nil {
+		return nil, fmt.Errorf("nil value")
+	}
+
+	v := reflect.ValueOf(value)
+
+	// 如果是指针，获取其元素
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, fmt.Errorf("nil pointer")
+		}
+		v = v.Elem()
+	}
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.Int8:
+		return []byte{byte(v.Int())}, nil
+	case reflect.Int16:
 		buf := make([]byte, 2)
-		binary.BigEndian.PutUint16(buf, uint16(v))
+		binary.BigEndian.PutUint16(buf, uint16(v.Int()))
 		return buf, nil
-	case int32:
+	case reflect.Int32:
 		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, uint32(v))
+		binary.BigEndian.PutUint32(buf, uint32(v.Int()))
 		return buf, nil
-	case int64:
+	case reflect.Int64, reflect.Int:
 		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, uint64(v))
+		binary.BigEndian.PutUint64(buf, uint64(v.Int()))
 		return buf, nil
-	case int:
-		// int 在不同平台可能是32位或64位，统一用64位存储
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, uint64(v))
-		return buf, nil
-	case uint8:
-		return []byte{v}, nil
-	case uint16:
+	case reflect.Uint8:
+		return []byte{byte(v.Uint())}, nil
+	case reflect.Uint16:
 		buf := make([]byte, 2)
-		binary.BigEndian.PutUint16(buf, v)
+		binary.BigEndian.PutUint16(buf, uint16(v.Uint()))
 		return buf, nil
-	case uint32:
+	case reflect.Uint32:
 		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, v)
+		binary.BigEndian.PutUint32(buf, uint32(v.Uint()))
 		return buf, nil
-	case uint64:
+	case reflect.Uint64, reflect.Uint:
 		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, v)
+		binary.BigEndian.PutUint64(buf, v.Uint())
 		return buf, nil
-	case uint:
-		// uint 统一用64位存储
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, uint64(v))
-		return buf, nil
-	case float32:
+	case reflect.Float32:
 		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, math.Float32bits(v))
+		binary.BigEndian.PutUint32(buf, math.Float32bits(float32(v.Float())))
 		return buf, nil
-	case float64:
+	case reflect.Float64:
 		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, math.Float64bits(v))
+		binary.BigEndian.PutUint64(buf, math.Float64bits(v.Float()))
 		return buf, nil
-	case bool:
-		if v {
+	case reflect.Bool:
+		if v.Bool() {
 			return []byte{1}, nil
 		}
 		return []byte{0}, nil
-	case string:
-		return []byte(v), nil
-	case []byte:
-		// 直接返回副本，避免修改原始数据
-		result := make([]byte, len(v))
-		copy(result, v)
-		return result, nil
+	case reflect.String:
+		return []byte(v.String()), nil
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			// []byte 类型
+			result := make([]byte, v.Len())
+			copy(result, v.Bytes())
+			return result, nil
+		}
+		fallthrough
 	default:
 		// 对于复杂类型，使用JSON序列化
 		return json.Marshal(value)
@@ -288,83 +230,154 @@ func parseBinaryValue[T any](data []byte, value *T) error {
 		return fmt.Errorf("empty binary data")
 	}
 
-	switch v := any(value).(type) {
-	case *int8:
+	// 使用反射获取目标类型的信息
+	v := reflect.ValueOf(value).Elem()
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.Int8:
 		if len(data) < 1 {
 			return fmt.Errorf("insufficient data for int8")
 		}
-		*v = int8(data[0])
-	case *int16:
+		v.SetInt(int64(data[0]))
+	case reflect.Int16:
 		if len(data) < 2 {
 			return fmt.Errorf("insufficient data for int16")
 		}
-		*v = int16(binary.BigEndian.Uint16(data))
-	case *int32:
+		v.SetInt(int64(binary.BigEndian.Uint16(data)))
+	case reflect.Int32:
 		if len(data) < 4 {
 			return fmt.Errorf("insufficient data for int32")
 		}
-		*v = int32(binary.BigEndian.Uint32(data))
-	case *int64:
+		v.SetInt(int64(binary.BigEndian.Uint32(data)))
+	case reflect.Int64, reflect.Int:
 		if len(data) < 8 {
 			return fmt.Errorf("insufficient data for int64")
 		}
-		*v = int64(binary.BigEndian.Uint64(data))
-	case *int:
-		if len(data) < 8 {
-			return fmt.Errorf("insufficient data for int")
-		}
-		*v = int(binary.BigEndian.Uint64(data))
-	case *uint8:
+		v.SetInt(int64(binary.BigEndian.Uint64(data)))
+	case reflect.Uint8:
 		if len(data) < 1 {
 			return fmt.Errorf("insufficient data for uint8")
 		}
-		*v = data[0]
-	case *uint16:
+		v.SetUint(uint64(data[0]))
+	case reflect.Uint16:
 		if len(data) < 2 {
 			return fmt.Errorf("insufficient data for uint16")
 		}
-		*v = binary.BigEndian.Uint16(data)
-	case *uint32:
+		v.SetUint(uint64(binary.BigEndian.Uint16(data)))
+	case reflect.Uint32:
 		if len(data) < 4 {
 			return fmt.Errorf("insufficient data for uint32")
 		}
-		*v = binary.BigEndian.Uint32(data)
-	case *uint64:
+		v.SetUint(uint64(binary.BigEndian.Uint32(data)))
+	case reflect.Uint64, reflect.Uint:
 		if len(data) < 8 {
 			return fmt.Errorf("insufficient data for uint64")
 		}
-		*v = binary.BigEndian.Uint64(data)
-	case *uint:
-		if len(data) < 8 {
-			return fmt.Errorf("insufficient data for uint")
-		}
-		*v = uint(binary.BigEndian.Uint64(data))
-	case *float32:
+		v.SetUint(binary.BigEndian.Uint64(data))
+	case reflect.Float32:
 		if len(data) < 4 {
 			return fmt.Errorf("insufficient data for float32")
 		}
 		bits := binary.BigEndian.Uint32(data)
-		*v = math.Float32frombits(bits)
-	case *float64:
+		v.SetFloat(float64(math.Float32frombits(bits)))
+	case reflect.Float64:
 		if len(data) < 8 {
 			return fmt.Errorf("insufficient data for float64")
 		}
 		bits := binary.BigEndian.Uint64(data)
-		*v = math.Float64frombits(bits)
-	case *bool:
+		v.SetFloat(math.Float64frombits(bits))
+	case reflect.Bool:
 		if len(data) < 1 {
 			return fmt.Errorf("insufficient data for bool")
 		}
-		*v = data[0] != 0
-	case *string:
-		*v = string(data)
-	case *[]byte:
-		// 创建副本，避免共享底层数组
-		*v = make([]byte, len(data))
-		copy(*v, data)
+		v.SetBool(data[0] != 0)
+	case reflect.String:
+		v.SetString(string(data))
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			// []byte 类型
+			newSlice := reflect.MakeSlice(v.Type(), len(data), len(data))
+			reflect.Copy(newSlice, reflect.ValueOf(data))
+			v.Set(newSlice)
+			return nil
+		}
+		fallthrough
 	default:
-		// 对于复杂类型，尝试JSON反序列化
 		return json.Unmarshal(data, value)
+	}
+	return nil
+}
+
+// convertToTargetType converts an interface{} value to the target type
+func convertToTargetType[R comparable](value any, target *R) error {
+	if value == nil {
+		return fmt.Errorf("cannot convert nil value")
+	}
+
+	// 使用反射获取目标类型的信息
+	v := reflect.ValueOf(target).Elem()
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.String:
+		if str, ok := value.(string); ok {
+			v.SetString(str)
+		} else {
+			str, err := anyToString(value)
+			if err != nil {
+				return err
+			}
+			v.SetString(str)
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		val := v.Int()
+		if v.OverflowInt(val) {
+			return fmt.Errorf("value %v overflows %s", val, v.Type())
+		}
+		v.SetInt(val)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		val := v.Uint()
+		uval := uint64(val)
+		if v.OverflowUint(uval) {
+			return fmt.Errorf("value %v overflows %s", val, v.Type())
+		}
+		v.SetUint(uval)
+	case reflect.Float32, reflect.Float64:
+		val := v.Float()
+		if v.OverflowFloat(val) {
+			return fmt.Errorf("value %v overflows %s", val, v.Type())
+		}
+		v.SetFloat(val)
+	case reflect.Bool:
+		if b, ok := value.(bool); ok {
+			v.SetBool(b)
+		} else if str, ok := value.(string); ok {
+			b, err := strconv.ParseBool(str)
+			if err != nil {
+				return fmt.Errorf("cannot convert string %q to bool: %v", str, err)
+			}
+			v.SetBool(b)
+		} else {
+			return fmt.Errorf("cannot convert %T to bool", value)
+		}
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			// []byte 类型
+			if b, ok := value.([]byte); ok {
+				newSlice := reflect.MakeSlice(v.Type(), len(b), len(b))
+				reflect.Copy(newSlice, reflect.ValueOf(b))
+				v.Set(newSlice)
+			} else if str, ok := value.(string); ok {
+				v.SetBytes([]byte(str))
+			} else {
+				return fmt.Errorf("cannot convert %T to []byte", value)
+			}
+		} else {
+			return fmt.Errorf("cannot convert %T to %s", value, v.Type())
+		}
+	default:
+		return fmt.Errorf("unsupported type %s", v.Type())
 	}
 	return nil
 }

@@ -3,7 +3,9 @@ package enums
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 )
 
 func MarshalJSON[R comparable, T comparable, E Enum[R, T]](e E, b any) ([]byte, error) {
@@ -37,17 +39,35 @@ func SQLValue[R comparable, T comparable, E Enum[R, T]](e E) (driver.Value, erro
 		return e.Name(), nil
 	}
 	val := any(e.Val())
-	if v, ok := toInt64(val); ok {
-		return v, nil
-	} else if v, ok := toFloat64(val); ok {
-		return v, nil
-	} else if v, ok := val.([]byte); ok {
-		return v, nil
-	} else if v, ok := val.(bool); ok {
-		return v, nil
-	} else if v, ok := val.(string); ok {
-		return v, nil
-	} else {
+	if val == nil {
+		return nil, errors.New("nil value")
+	}
+
+	v := reflect.ValueOf(val)
+
+	// 如果是指针，获取其元素
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, errors.New("nil value")
+		}
+		v = v.Elem()
+	}
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int64(v.Int()), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(v.Uint()), nil
+	case reflect.Float32, reflect.Float64:
+		return v.Float(), nil
+	case reflect.Bool:
+		return v.Bool(), nil
+	case reflect.String:
+		return v.String(), nil
+	case reflect.Slice:
+		return v.Bytes(), nil
+	default:
 		marshal, err := json.Marshal(val)
 		if err != nil {
 			return "", err
@@ -59,7 +79,7 @@ func SQLValue[R comparable, T comparable, E Enum[R, T]](e E) (driver.Value, erro
 func SQLScan[R comparable, T comparable, E Enum[R, T]](e E, src any) (*E, error) {
 	if e.SerdeFormat() == FormatName {
 		var name string
-		err := NewScanner[string](&name).Scan(src)
+		err := NewScanner(&name).Scan(src)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +87,7 @@ func SQLScan[R comparable, T comparable, E Enum[R, T]](e E, src any) (*E, error)
 	}
 
 	var rawValue R
-	err := NewScanner[R](&rawValue).Scan(src)
+	err := NewScanner(&rawValue).Scan(src)
 	if err != nil {
 		return nil, err
 	}
@@ -155,17 +175,35 @@ func MarshalYAML[R comparable, T comparable, E Enum[R, T]](e E, b any) (interfac
 
 	// For value format, we need to return the actual value
 	val := any(e.Val())
-	if v, ok := toInt64(val); ok {
-		return v, nil
-	} else if v, ok := toFloat64(val); ok {
-		return v, nil
-	} else if v, ok := val.(bool); ok {
-		return v, nil
-	} else if v, ok := val.(string); ok {
-		return v, nil
-	} else if v, ok := val.([]byte); ok {
-		return string(v), nil
-	} else {
+	if val == nil {
+		return nil, errors.New("nil value")
+	}
+
+	v := reflect.ValueOf(val)
+
+	// 如果是指针，获取其元素
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, errors.New("nil value")
+		}
+		v = v.Elem()
+	}
+
+	// 获取底层类型的Kind
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int64(v.Int()), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(v.Uint()), nil
+	case reflect.Float32, reflect.Float64:
+		return v.Float(), nil
+	case reflect.Bool:
+		return v.Bool(), nil
+	case reflect.String:
+		return v.String(), nil
+	case reflect.Slice:
+		return v.Bytes(), nil
+	default:
 		// For complex types, convert to string representation
 		str, err := anyToString(val)
 		if err != nil {
@@ -201,116 +239,4 @@ func UnmarshalYAML[R comparable, T comparable, E Enum[R, T]](e E, node YAMLNode)
 	}
 
 	return findNameOrValue(e, rawValue, false, rawValue)
-}
-
-// convertToTargetType converts an interface{} value to the target type
-func convertToTargetType[R comparable](value interface{}, target *R) error {
-	switch t := any(target).(type) {
-	case *string:
-		if str, ok := value.(string); ok {
-			*t = str
-		} else {
-			str, err := anyToString(value)
-			if err != nil {
-				return err
-			}
-			*t = str
-		}
-	case *int:
-		if v, ok := toInt64(value); ok {
-			*t = int(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to int", value)
-		}
-	case *int8:
-		if v, ok := toInt64(value); ok {
-			*t = int8(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to int8", value)
-		}
-	case *int16:
-		if v, ok := toInt64(value); ok {
-			*t = int16(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to int16", value)
-		}
-	case *int32:
-		if v, ok := toInt64(value); ok {
-			*t = int32(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to int32", value)
-		}
-	case *int64:
-		if v, ok := toInt64(value); ok {
-			*t = v
-		} else {
-			return fmt.Errorf("cannot convert %T to int64", value)
-		}
-	case *uint:
-		if v, ok := toInt64(value); ok && v >= 0 {
-			*t = uint(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to uint", value)
-		}
-	case *uint8:
-		if v, ok := toInt64(value); ok && v >= 0 && v <= 255 {
-			*t = uint8(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to uint8", value)
-		}
-	case *uint16:
-		if v, ok := toInt64(value); ok && v >= 0 && v <= 65535 {
-			*t = uint16(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to uint16", value)
-		}
-	case *uint32:
-		if v, ok := toInt64(value); ok && v >= 0 && v <= 4294967295 {
-			*t = uint32(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to uint32", value)
-		}
-	case *uint64:
-		if v, ok := toInt64(value); ok && v >= 0 {
-			*t = uint64(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to uint64", value)
-		}
-	case *float32:
-		if v, ok := toFloat64(value); ok {
-			*t = float32(v)
-		} else {
-			return fmt.Errorf("cannot convert %T to float32", value)
-		}
-	case *float64:
-		if v, ok := toFloat64(value); ok {
-			*t = v
-		} else {
-			return fmt.Errorf("cannot convert %T to float64", value)
-		}
-	case *bool:
-		if v, ok := value.(bool); ok {
-			*t = v
-		} else {
-			return fmt.Errorf("cannot convert %T to bool", value)
-		}
-	case *[]byte:
-		if v, ok := value.(string); ok {
-			*t = []byte(v)
-		} else if v, ok := value.([]byte); ok {
-			*t = v
-		} else {
-			return fmt.Errorf("cannot convert %T to []byte", value)
-		}
-	default:
-		// For complex types, try JSON conversion
-		jsonData, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf("failed to marshal value for conversion: %w", err)
-		}
-		if err := json.Unmarshal(jsonData, target); err != nil {
-			return fmt.Errorf("failed to unmarshal value: %w", err)
-		}
-	}
-	return nil
 }

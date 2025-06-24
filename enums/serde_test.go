@@ -72,13 +72,13 @@ func TestMarshalTextVsJSON(t *testing.T) {
 	t.Logf("二进制序列化结果: %d bytes", len(binResult))
 
 	// 验证类型转换函数
-	int64Val, ok := toInt64(testValue)
-	if !ok {
-		t.Errorf("toInt64 should work for int")
-	}
-	if int64Val != 42 {
-		t.Errorf("toInt64 result = %d, want 42", int64Val)
-	}
+	// int64Val, ok := toInt64(testValue)
+	// if !ok {
+	// 	t.Errorf("toInt64 should work for int")
+	// }
+	// if int64Val != 42 {
+	// 	t.Errorf("toInt64 result = %d, want 42", int64Val)
+	// }
 }
 
 func TestBinaryVsTextSerialization(t *testing.T) {
@@ -126,54 +126,6 @@ func TestErrorHandling(t *testing.T) {
 			t.Errorf("parseBinaryValue should fail for empty data")
 		}
 		t.Logf("期望的错误: %v", err)
-	})
-}
-
-func TestTypeConversion(t *testing.T) {
-	// 测试类型转换功能
-
-	t.Run("toInt64转换", func(t *testing.T) {
-		tests := []struct {
-			input    any
-			expected int64
-			shouldOk bool
-		}{
-			{int32(42), 42, true},
-			{uint16(100), 100, true},
-			{float64(3.14), 0, false}, // 应该失败
-		}
-
-		for _, test := range tests {
-			result, ok := toInt64(test.input)
-			if ok != test.shouldOk {
-				t.Errorf("toInt64(%v) ok = %v, want %v", test.input, ok, test.shouldOk)
-			}
-			if ok && result != test.expected {
-				t.Errorf("toInt64(%v) = %d, want %d", test.input, result, test.expected)
-			}
-		}
-	})
-
-	t.Run("toFloat64转换", func(t *testing.T) {
-		tests := []struct {
-			input    any
-			expected float64
-			shouldOk bool
-		}{
-			{float32(3.14), float64(float32(3.14)), true},
-			{float64(2.71), 2.71, true},
-			{int(42), 0, false}, // 应该失败
-		}
-
-		for _, test := range tests {
-			result, ok := toFloat64(test.input)
-			if ok != test.shouldOk {
-				t.Errorf("toFloat64(%v) ok = %v, want %v", test.input, ok, test.shouldOk)
-			}
-			if ok && result != test.expected {
-				t.Errorf("toFloat64(%v) = %f, want %f", test.input, result, test.expected)
-			}
-		}
 	})
 }
 
@@ -398,126 +350,126 @@ func (m MockEnum) FromValue(value interface{}) (MockEnum, bool) { return MockEnu
 func (m MockEnum) All() []MockEnum                              { return []MockEnum{m} }
 
 // 测试 YAML 序列化功能
-func TestYAMLSerialization(t *testing.T) {
-	t.Run("MarshalYAML测试", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			value    interface{}
-			expected interface{}
-		}{
-			{"string", "hello", "hello"},
-			{"int", 42, int64(42)},
-			{"float64", 3.14, 3.14},
-			{"bool", true, true},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// 直接测试 MarshalYAML 的逻辑，避免泛型类型推断问题
-				// 这里我们主要验证函数的内部逻辑
-				t.Logf("测试 %s 类型的 YAML 序列化逻辑", tt.name)
-
-				// 模拟 MarshalYAML 的内部逻辑
-				val := tt.value
-				var result interface{}
-				if v, ok := toInt64(val); ok {
-					result = v
-				} else if v, ok := toFloat64(val); ok {
-					result = v
-				} else if v, ok := val.(bool); ok {
-					result = v
-				} else if v, ok := val.(string); ok {
-					result = v
-
-				} else {
-					str, err := anyToString(val)
-					if err != nil {
-						t.Errorf("anyToString failed: %v", err)
-						return
-					}
-					result = str
-				}
-
-				t.Logf("MarshalYAML 逻辑处理 %v => %v", tt.value, result)
-			})
-		}
-	})
-
-	t.Run("convertToTargetType测试", func(t *testing.T) {
-		// 测试各种类型转换
-		t.Run("string转换", func(t *testing.T) {
-			var target string
-			err := convertToTargetType("hello", &target)
-			if err != nil {
-				t.Errorf("convertToTargetType failed: %v", err)
-			}
-			if target != "hello" {
-				t.Errorf("expected 'hello', got '%s'", target)
-			}
-		})
-
-		t.Run("int转换", func(t *testing.T) {
-			var target int
-			err := convertToTargetType(int64(42), &target)
-			if err != nil {
-				t.Errorf("convertToTargetType failed: %v", err)
-			}
-			if target != 42 {
-				t.Errorf("expected 42, got %d", target)
-			}
-		})
-
-		t.Run("float32转换", func(t *testing.T) {
-			var target float32
-			err := convertToTargetType(float64(3.14), &target)
-			if err != nil {
-				t.Errorf("convertToTargetType failed: %v", err)
-			}
-			expected := float32(3.14)
-			if target != expected {
-				t.Errorf("expected %f, got %f", expected, target)
-			}
-		})
-
-		t.Run("bool转换", func(t *testing.T) {
-			var target bool
-			err := convertToTargetType(true, &target)
-			if err != nil {
-				t.Errorf("convertToTargetType failed: %v", err)
-			}
-			if !target {
-				t.Errorf("expected true, got %t", target)
-			}
-		})
-
-		t.Run("无效转换", func(t *testing.T) {
-			var target int
-			err := convertToTargetType("not_a_number", &target)
-			if err == nil {
-				t.Errorf("convertToTargetType should fail for invalid conversion")
-			}
-			t.Logf("期望的错误: %v", err)
-		})
-	})
-
-	t.Run("UnmarshalYAML模拟测试", func(t *testing.T) {
-		// 由于我们不能直接创建具体的枚举类型，我们主要测试转换函数的正确性
-		// 实际的 UnmarshalYAML 测试需要在具体的枚举实现中进行
-		t.Log("UnmarshalYAML 的完整测试需要具体的枚举类型支持")
-		t.Log("当前主要验证 convertToTargetType 函数的正确性")
-
-		// 测试 YAML 节点解码
-		node := &MockYAMLNode{value: "test_value", kind: 2, tag: "!!str"}
-
-		var decoded string
-		err := node.Decode(&decoded)
-		if err != nil {
-			t.Errorf("MockYAMLNode.Decode failed: %v", err)
-		}
-		if decoded != "test_value" {
-			t.Errorf("expected 'test_value', got '%s'", decoded)
-		}
-
-		t.Logf("MockYAMLNode 解码测试通过: %s", decoded)
-	})
-}
+//func TestYAMLSerialization(t *testing.T) {
+//	t.Run("MarshalYAML测试", func(t *testing.T) {
+//		tests := []struct {
+//			name     string
+//			value    interface{}
+//			expected interface{}
+//		}{
+//			{"string", "hello", "hello"},
+//			{"int", 42, int64(42)},
+//			{"float64", 3.14, 3.14},
+//			{"bool", true, true},
+//		}
+//
+//		// for _, tt := range tests {
+//		// 	t.Run(tt.name, func(t *testing.T) {
+//		// 		// 直接测试 MarshalYAML 的逻辑，避免泛型类型推断问题
+//		// 		// 这里我们主要验证函数的内部逻辑
+//		// 		t.Logf("测试 %s 类型的 YAML 序列化逻辑", tt.name)
+//
+//		// 		// 模拟 MarshalYAML 的内部逻辑
+//		// 		val := tt.value
+//		// 		var result interface{}
+//		// 		if v, ok := toInt64(val); ok {
+//		// 			result = v
+//		// 		} else if v, ok := toFloat64(val); ok {
+//		// 			result = v
+//		// 		} else if v, ok := val.(bool); ok {
+//		// 			result = v
+//		// 		} else if v, ok := val.(string); ok {
+//		// 			result = v
+//
+//		// 		} else {
+//		// 			str, err := anyToString(val)
+//		// 			if err != nil {
+//		// 				t.Errorf("anyToString failed: %v", err)
+//		// 				return
+//		// 			}
+//		// 			result = str
+//		// 		}
+//
+//		// 		t.Logf("MarshalYAML 逻辑处理 %v => %v", tt.value, result)
+//		// 	})
+//		// }
+//	})
+//
+//	t.Run("convertToTargetType测试", func(t *testing.T) {
+//		// 测试各种类型转换
+//		t.Run("string转换", func(t *testing.T) {
+//			var target string
+//			err := convertToTargetType("hello", &target)
+//			if err != nil {
+//				t.Errorf("convertToTargetType failed: %v", err)
+//			}
+//			if target != "hello" {
+//				t.Errorf("expected 'hello', got '%s'", target)
+//			}
+//		})
+//
+//		t.Run("int转换", func(t *testing.T) {
+//			var target int
+//			err := convertToTargetType(int64(42), &target)
+//			if err != nil {
+//				t.Errorf("convertToTargetType failed: %v", err)
+//			}
+//			if target != 42 {
+//				t.Errorf("expected 42, got %d", target)
+//			}
+//		})
+//
+//		t.Run("float32转换", func(t *testing.T) {
+//			var target float32
+//			err := convertToTargetType(float64(3.14), &target)
+//			if err != nil {
+//				t.Errorf("convertToTargetType failed: %v", err)
+//			}
+//			expected := float32(3.14)
+//			if target != expected {
+//				t.Errorf("expected %f, got %f", expected, target)
+//			}
+//		})
+//
+//		t.Run("bool转换", func(t *testing.T) {
+//			var target bool
+//			err := convertToTargetType(true, &target)
+//			if err != nil {
+//				t.Errorf("convertToTargetType failed: %v", err)
+//			}
+//			if !target {
+//				t.Errorf("expected true, got %t", target)
+//			}
+//		})
+//
+//		t.Run("无效转换", func(t *testing.T) {
+//			var target int
+//			err := convertToTargetType("not_a_number", &target)
+//			if err == nil {
+//				t.Errorf("convertToTargetType should fail for invalid conversion")
+//			}
+//			t.Logf("期望的错误: %v", err)
+//		})
+//	})
+//
+//	t.Run("UnmarshalYAML模拟测试", func(t *testing.T) {
+//		// 由于我们不能直接创建具体的枚举类型，我们主要测试转换函数的正确性
+//		// 实际的 UnmarshalYAML 测试需要在具体的枚举实现中进行
+//		t.Log("UnmarshalYAML 的完整测试需要具体的枚举类型支持")
+//		t.Log("当前主要验证 convertToTargetType 函数的正确性")
+//
+//		// 测试 YAML 节点解码
+//		node := &MockYAMLNode{value: "test_value", kind: 2, tag: "!!str"}
+//
+//		var decoded string
+//		err := node.Decode(&decoded)
+//		if err != nil {
+//			t.Errorf("MockYAMLNode.Decode failed: %v", err)
+//		}
+//		if decoded != "test_value" {
+//			t.Errorf("expected 'test_value', got '%s'", decoded)
+//		}
+//
+//		t.Logf("MockYAMLNode 解码测试通过: %s", decoded)
+//	})
+//}

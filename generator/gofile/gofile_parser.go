@@ -132,15 +132,22 @@ func (p *Parser) buildGenerationRequests(enInfo enumInfo, packageName string, fi
 	baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
 
 	// Create a single GenerationRequest containing all enums from this file
-	genr := []enum.GenerationRequest{{
+	request := enum.GenerationRequest{
 		Package:        packageName,
-		EnumIotas:      enInfo.Enums, // Pass all enums instead of single enum
+		EnumIotas:      enInfo.Enums, // Pass all enums for multi-enum support
 		Version:        version.CURRENT,
 		SourceFilename: filename,
 		OutputFilename: gostrings.ToLower(baseFilename),
 		Configuration:  p.Configuration,
 		Imports:        enInfo.Imports,
-	}}
+	}
+
+	// For backward compatibility: if there's only one enum, also set EnumIota
+	if len(enInfo.Enums) == 1 {
+		request.EnumIota = enInfo.Enums[0]
+	}
+
+	genr := []enum.GenerationRequest{request}
 
 	return genr, nil
 }
@@ -151,19 +158,37 @@ func extractEnumInfo(ctx context.Context, p *Parser, node *ast.File) (string, en
 	enInfo := p.getEnumInfo(node)
 	enumTypeConfigs := p.findGoEnumsComments(node)
 
+	// Filter enums to only include those that have:
+	// 1. Explicit goenums comments, OR
+	// 2. Corresponding constant blocks with iota
+	var validEnums []enum.EnumIota
+
 	slog.Default().DebugContext(ctx, "enum iota", "count", len(enInfo.Enums), "enumIota", enInfo.Enums)
-	for i, enumIota := range enInfo.Enums {
+	for _, enumIota := range enInfo.Enums {
 		slog.Default().DebugContext(ctx, "enum iota", "enumIota", enumIota)
 		enums := p.getEnums(node, &enumIota)
-		if len(enums) == 0 {
-			return "", enumInfo{}, nil, fmt.Errorf("%w: %w",
-				ErrParseGoSource,
-				enum.ErrNoEnumsFound)
+
+		// Check if this type has a goenums comment OR has valid enum constants
+		_, hasGoenumsComment := enumTypeConfigs[enumIota.Type]
+		hasValidEnums := len(enums) > 0
+
+		if hasGoenumsComment || hasValidEnums {
+			// This is a valid enum type
+			if hasValidEnums {
+				enumIota.Enums = enums
+				validEnums = append(validEnums, enumIota)
+				slog.Default().DebugContext(ctx, "enums", "count", len(enums), "enums", enums)
+			} else if hasGoenumsComment {
+				// Has goenums comment but no valid enums - this is an error for explicit enums
+				return "", enumInfo{}, nil, fmt.Errorf("%w: %w for type %s",
+					ErrParseGoSource,
+					enum.ErrNoEnumsFound, enumIota.Type)
+			}
 		}
-		slog.Default().DebugContext(ctx, "enums", "count", len(enums), "enums", enums)
-		enumIota.Enums = enums
-		enInfo.Enums[i] = enumIota
+		// If neither condition is met, silently skip this type (it's like IntStatus in the bug report)
 	}
+
+	enInfo.Enums = validEnums
 	if len(enInfo.Enums) == 0 {
 		slog.Default().DebugContext(ctx, "no valid enums found")
 		return "", enumInfo{}, nil, fmt.Errorf("%w: %w",
@@ -711,8 +736,10 @@ func (p *Parser) getEnumInfo(node *ast.File) enumInfo {
 				continue
 			}
 			if ts.Type != nil {
+				typeName := ts.Name.Name
+
 				enumIota := enum.EnumIota{
-					Type: ts.Name.Name,
+					Type: typeName,
 				}
 
 				// Extract underlying type
