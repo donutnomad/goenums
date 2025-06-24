@@ -25,6 +25,11 @@ Documentation is available at [https://zarldev.github.io/goenums](https://zarlde
     - [Multi-line Comment Format](#multi-line-comment-format)
     - [Single-line Comment Format with Semicolon](#single-line-comment-format-with-semicolon)
     - [Generated Output](#generated-output)
+  - [Inline Configuration Comments](#inline-configuration-comments)
+    - [Supported Configuration Options](#supported-configuration-options)
+    - [Usage Examples](#usage-examples)
+    - [Serialization Modes](#serialization-modes)
+    - [State Machine Support](#state-machine-support)
   - [Extended Enum Types with Custom Fields](#extended-enum-types-with-custom-fields)
   - [Case Insensitive String Parsing](#case-insensitive-string-parsing)
   - [JSON, Text, Binary, YAML, and Database Storage](#json-text-binary-yaml-and-database-storage)
@@ -202,6 +207,93 @@ var Statuses = statusesContainer{
         status: skipped,
     },
 }
+```
+
+## Inline Configuration Comments
+
+Control enum generation behavior with inline `// goenums:` comments that can be placed anywhere in your source file. These comments allow you to specify generation options on a per-enum basis, overriding global command-line flags.
+
+### Supported Configuration Options
+
+The `// goenums:` comment syntax supports the following options:
+
+- `-sql` - Generate SQL Scanner and Valuer implementations for database integration
+- `-json` - Generate JSON marshaling and unmarshaling methods
+- `-text` - Generate text marshaling and unmarshaling methods
+- `-binary` - Generate binary marshaling and unmarshaling methods  
+- `-yaml` - Generate YAML marshaling and unmarshaling methods
+- `-serde/value` - Use enum values for serialization instead of names
+- `-serde/name` - Use enum names for serialization (default behavior)
+- `-genName` - Generate name-based accessor methods
+- `-statemachine` - Generate state machine transition methods
+
+### Usage Examples
+
+```go
+package validation
+
+// Configure enum with SQL, JSON support and value-based serialization
+// goenums: -sql -json -serde/value -genName
+type tokenRequestStatus int
+
+const (
+    Step1Initialized tokenRequestStatus = 1000 // Step1 process started
+    Step1Canceled    tokenRequestStatus = 9010 // User manually canceled
+    Step1MarkAllowed tokenRequestStatus = 1001 // Marked as approved
+    // ... more constants
+)
+
+// Configure enum with multiple serialization formats using name-based serialization
+// goenums: -json -text -binary -yaml -serde/name
+type stringStatus int
+
+const (
+    none           stringStatus = 0 // invalid
+    StringActive   stringStatus = 1 // Active
+    StringInactive stringStatus = 2 // Inactive
+)
+
+// Configure enum for state machine functionality
+// goenums: -statemachine
+type orderStatus int
+
+const (
+    // Pending
+    // state: -> xProcessing, orderCancelled
+    orderPending orderStatus = iota
+    // Processing  
+    // state: -> orderShipped, orderFailed
+    xProcessing
+    // Shipped
+    // state: -> orderDelivered
+    orderShipped
+    // Delivered
+    // state: [final]
+    orderDelivered
+)
+```
+
+### Serialization Modes
+
+- **`-serde/name`** (default): Serializes enum using the string name representation
+  ```go
+  // JSON output: {"status": "Active"}
+  ```
+
+- **`-serde/value`**: Serializes enum using the underlying numeric value
+  ```go
+  // JSON output: {"status": 1}
+  ```
+
+### State Machine Support
+
+When using `-statemachine`, the generator creates additional methods for managing state transitions:
+
+```go
+// Generated methods for state machine enums
+func (o OrderStatus) CanTransitionTo(target OrderStatus) bool
+func (o OrderStatus) ValidTransitions() []OrderStatus
+func (o OrderStatus) IsFinalState() bool
 ```
 
 ## Extended Enum Types with Custom Fields
